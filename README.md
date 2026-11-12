@@ -20,7 +20,7 @@ The primary purpose of this project was to gain practical, hands-on experience i
 
 ---
 
-## 🛠️ Technology Stack
+## 🛠️ Technology Stackkk
 
 The project relies on a clean, dependency-free tech stack with zero heavy external frameworks:
 
