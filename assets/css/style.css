@@ -556,22 +556,33 @@ img, svg {
 .composer-tools {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .composer-tool-btn {
   color: var(--primary-blue);
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .composer-tool-btn:hover {
   background-color: var(--primary-blue-light);
+}
+
+.composer-tool-btn svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .composer-post-btn {
@@ -1569,22 +1580,162 @@ img, svg {
 .x-toolbar-icons {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+}
+
+/* Post Format Toolbar (Bold, Italic, Strike, Heading) */
+.format-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: transparent;
+  user-select: none;
+}
+
+.format-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  font-family: inherit;
+}
+
+.format-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-main);
+}
+
+.format-btn.active,
+.format-btn.is-active {
+  background-color: rgba(29, 155, 240, 0.18);
+  color: var(--primary-blue);
+}
+
+.format-btn .fmt-b {
+  font-weight: 800;
+  font-size: 15px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1;
+}
+
+.format-btn .fmt-i {
+  font-style: italic;
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.format-btn .fmt-s {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.format-btn .fmt-heading {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.format-divider {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  margin: 0 4px;
+  align-self: center;
+  opacity: 0.6;
+}
+
+.format-toolbar:only-child .format-divider {
+  display: none;
+}
+
+/* Rich Content Editable Editors */
+.rich-editor {
+  min-height: 110px;
+  max-height: 380px;
+  overflow-y: auto;
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+
+.rich-editor:focus {
+  outline: none;
+}
+
+.rich-editor:empty::before,
+.rich-editor[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  display: block;
+}
+
+.rich-editor h3 {
+  font-size: 1.25em;
+  font-weight: 700;
+  margin: 6px 0;
+  color: var(--text-main);
+}
+
+.rich-editor b,
+.rich-editor strong {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.rich-editor i,
+.rich-editor em {
+  font-style: italic;
+}
+
+.rich-editor s,
+.rich-editor strike,
+.rich-editor del {
+  text-decoration: line-through;
 }
 
 .x-tool-btn {
   color: var(--primary-blue);
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .x-tool-btn:hover {
   background-color: var(--primary-blue-light);
+}
+
+.x-tool-btn svg {
+  width: 19px;
+  height: 19px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .x-compose-submit-btn {

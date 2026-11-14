@@ -159,6 +159,11 @@ function openCreateThreadModal(groupId) {
 function closeCreateThreadModal() {
   const modal = document.getElementById('create-thread-modal');
   if (modal) modal.classList.remove('active');
+  const editor = document.getElementById('post-content-editor');
+  if (editor) {
+    editor.innerHTML = '';
+    if (typeof syncRichEditor === 'function') syncRichEditor(editor);
+  }
 }
 
 function openEditPostModal(idOrBtn, title, content) {
@@ -187,6 +192,11 @@ function openEditPostModal(idOrBtn, title, content) {
   document.getElementById('edit-post-id').value = id || '';
   document.getElementById('edit-post-title').value = title || '';
   document.getElementById('edit-post-content').value = content || '';
+  const editEditor = document.getElementById('edit-post-content-editor');
+  if (editEditor) {
+    editEditor.innerHTML = content || '';
+    if (typeof syncRichEditor === 'function') syncRichEditor(editEditor);
+  }
   
   // Remove any previously appended delete_image_ids hidden inputs
   const form = document.getElementById('edit-post-form');
@@ -863,6 +873,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const groupVal = postGroupInput ? postGroupInput.value.trim() : '';
       const titleInput = document.getElementById('post-title');
       const contentInput = document.getElementById('post-content');
+      const postEditor = document.getElementById('post-content-editor');
+      if (postEditor && typeof syncRichEditor === 'function') {
+        syncRichEditor(postEditor);
+      }
       const submitBtn = document.getElementById('btn-submit-post');
       const trigger = document.getElementById('group-picker-trigger');
       const groupErr = document.getElementById('create-post-group-error');
@@ -942,3 +956,247 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// ========================================================
+// Visual Rich Post Composer Formatting Engine (WYSIWYG Bold, Italic, Strike, Heading)
+// ========================================================
+
+function syncRichEditor(editor) {
+  if (!editor) return;
+  const targetId = editor.getAttribute('data-sync');
+  let textarea = targetId ? document.getElementById(targetId) : null;
+  if (!textarea && editor.parentElement) {
+    textarea = editor.parentElement.querySelector('textarea');
+  }
+  if (!textarea) return;
+
+  const text = editor.innerText.trim();
+  if (text.length === 0) {
+    textarea.value = '';
+    editor.setAttribute('data-empty', 'true');
+  } else {
+    textarea.value = editor.innerHTML;
+    editor.removeAttribute('data-empty');
+  }
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function getActiveRichEditor(toolbar) {
+  // 1. Check focused element
+  const active = document.activeElement;
+  if (active && active.classList.contains('rich-editor')) return active;
+
+  // 2. Check toolbar data-target
+  if (toolbar) {
+    const targetId = toolbar.getAttribute('data-target');
+    if (targetId) {
+      const editor = document.getElementById(targetId + '-editor') || document.getElementById(targetId);
+      if (editor && editor.classList.contains('rich-editor')) return editor;
+    }
+    const container = toolbar.closest('form') || toolbar.closest('.x-compose-dialog') || toolbar.closest('.modal-dialog');
+    if (container) {
+      const editor = container.querySelector('.rich-editor');
+      if (editor) return editor;
+    }
+  }
+
+  // 3. Fallback to open modals
+  const activeModal = document.querySelector('.modal-overlay.active');
+  if (activeModal) {
+    const editor = activeModal.querySelector('.rich-editor');
+    if (editor) return editor;
+  }
+
+  return document.getElementById('post-content-editor');
+}
+
+function ensureEditorFocus(editor) {
+  if (!editor) return;
+  editor.focus();
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) {
+    const range = document.createRange();
+    if (!editor.firstChild) {
+      const p = document.createElement('p');
+      p.innerHTML = '<br>';
+      editor.appendChild(p);
+      range.setStart(p, 0);
+      range.collapse(true);
+    } else {
+      range.selectNodeContents(editor);
+      range.collapse(false);
+    }
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+}
+
+function updateToolbarStates(editor) {
+  if (!editor) {
+    editor = document.activeElement;
+    if (!editor || !editor.classList.contains('rich-editor')) return;
+  }
+
+  let isBold = false;
+  let isItalic = false;
+  let isStrike = false;
+  let isHeading = false;
+
+  try {
+    isBold = document.queryCommandState('bold');
+    isItalic = document.queryCommandState('italic');
+    isStrike = document.queryCommandState('strikeThrough');
+  } catch (e) {}
+
+  const sel = window.getSelection();
+  if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
+    const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+    if (parent && parent.closest('h1, h2, h3, h4, h5, h6')) {
+      isHeading = true;
+    }
+  }
+
+  const toolbars = document.querySelectorAll('.format-toolbar');
+  toolbars.forEach(tb => {
+    const targetId = tb.getAttribute('data-target');
+    const matchesTarget = targetId && (editor.id === targetId || editor.id === targetId + '-editor');
+    const sameDialog = (tb.closest('.modal-dialog') && tb.closest('.modal-dialog') === editor.closest('.modal-dialog')) ||
+                       (tb.closest('form') && tb.closest('form') === editor.closest('form'));
+
+    if (matchesTarget || sameDialog || (!targetId && !editor.id)) {
+      const bBtn = tb.querySelector('[data-format="bold"]');
+      const iBtn = tb.querySelector('[data-format="italic"]');
+      const sBtn = tb.querySelector('[data-format="strike"]');
+      const hBtn = tb.querySelector('[data-format="heading"]');
+
+      if (bBtn) bBtn.classList.toggle('active', isBold);
+      if (iBtn) iBtn.classList.toggle('active', isItalic);
+      if (sBtn) sBtn.classList.toggle('active', isStrike);
+      if (hBtn) hBtn.classList.toggle('active', isHeading);
+    }
+  });
+}
+
+function applyVisualFormat(editor, formatType) {
+  if (!editor) return;
+  ensureEditorFocus(editor);
+
+  const sel = window.getSelection();
+  if (formatType === 'heading') {
+    let inHeading = false;
+    if (sel && sel.anchorNode) {
+      const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+      if (parent && parent.closest('h1, h2, h3, h4, h5, h6')) inHeading = true;
+    }
+    document.execCommand('formatBlock', false, inHeading ? '<p>' : '<h3>');
+  } else if (formatType === 'bold') {
+    document.execCommand('bold', false, null);
+  } else if (formatType === 'italic') {
+    document.execCommand('italic', false, null);
+  } else if (formatType === 'strike') {
+    document.execCommand('strikeThrough', false, null);
+  }
+
+  syncRichEditor(editor);
+  updateToolbarStates(editor);
+}
+
+// Prevent format buttons from stealing selection focus on mousedown
+document.addEventListener('mousedown', (e) => {
+  const btn = e.target.closest('.format-btn');
+  if (btn) {
+    e.preventDefault();
+  }
+});
+
+// Click listener for format buttons
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.format-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+
+  const toolbar = btn.closest('.format-toolbar');
+  const format = btn.getAttribute('data-format');
+
+  // Quick composer trigger
+  if (toolbar && toolbar.closest('.x-quick-composer')) {
+    if (typeof openCreateThreadModal === 'function') {
+      openCreateThreadModal();
+      setTimeout(() => {
+        const editor = document.getElementById('post-content-editor');
+        if (editor) applyVisualFormat(editor, format);
+      }, 100);
+      return;
+    }
+  }
+
+  const editor = getActiveRichEditor(toolbar);
+  if (editor && editor.classList.contains('rich-editor')) {
+    applyVisualFormat(editor, format);
+    return;
+  }
+
+  // Plain textarea fallback if used outside rich-editor
+  const targetId = toolbar ? toolbar.getAttribute('data-target') : null;
+  const textarea = targetId ? document.getElementById(targetId) : (toolbar ? toolbar.closest('form')?.querySelector('textarea') : null);
+  if (textarea) {
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const val = textarea.value;
+    const selected = val.substring(start, end);
+    const wrap = { bold: ['**', '**'], italic: ['*', '*'], strike: ['~~', '~~'], heading: ['## ', ''] }[format] || ['**', '**'];
+    if (selected.length > 0) {
+      textarea.value = val.substring(0, start) + wrap[0] + selected + wrap[1] + val.substring(end);
+    }
+    textarea.focus();
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+});
+
+// Synchronize rich-editor elements on input, keyup, paste, and blur
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.classList.contains('rich-editor')) {
+    syncRichEditor(e.target);
+    updateToolbarStates(e.target);
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  if (e.target && e.target.classList.contains('rich-editor')) {
+    updateToolbarStates(e.target);
+  }
+});
+
+document.addEventListener('mouseup', (e) => {
+  if (e.target && e.target.classList.contains('rich-editor')) {
+    updateToolbarStates(e.target);
+  }
+});
+
+document.addEventListener('selectionchange', () => {
+  const active = document.activeElement;
+  if (active && active.classList.contains('rich-editor')) {
+    updateToolbarStates(active);
+  }
+});
+
+document.addEventListener('blur', (e) => {
+  if (e.target && e.target.classList.contains('rich-editor')) {
+    syncRichEditor(e.target);
+  }
+}, true);
+
+// Ensure forms sync editors before submit
+document.addEventListener('submit', (e) => {
+  const form = e.target;
+  if (form) {
+    form.querySelectorAll('.rich-editor').forEach(syncRichEditor);
+  }
+});
+
+window.syncRichEditor = syncRichEditor;
+window.applyVisualFormat = applyVisualFormat;
+window.updateToolbarStates = updateToolbarStates;
