@@ -228,23 +228,26 @@ $userGroups  = [];
 
 if ($tab === 'posts') {
 
-    $userPosts = $conn->execute_query("
-
-        SELECT p.*, g.name as group_name, g.image_url as group_image, u.name as author_name, u.username as author_username, u.avatar as author_avatar,
-
+    $profilePostSql = "
+        SELECT p.*, g.name as group_name, g.image_url as group_image, g.status as group_status,
+               u.name as author_name, u.username as author_username, u.avatar as author_avatar,
                (SELECT COUNT(*) FROM replies r WHERE r.post_id = p.id) as reply_count
-
         FROM posts p
-
         LEFT JOIN groups g ON p.group_id = g.id
-
         JOIN users u ON p.user_id = u.id
-
         WHERE p.user_id = ?
-
-        ORDER BY p.created_at DESC
-
-    ", [$profileId])->fetch_all(MYSQLI_ASSOC);
+    ";
+    $profilePostParams = [$profileId];
+    if (!is_admin() && (!$currentUser || (int)$currentUser['id'] !== (int)$profileId)) {
+        if ($currentUser) {
+            $profilePostSql .= " AND (g.status IS NULL OR g.status != 'private' OR EXISTS (SELECT 1 FROM group_members gm WHERE gm.group_id = g.id AND gm.user_id = ?))";
+            $profilePostParams[] = (int)$currentUser['id'];
+        } else {
+            $profilePostSql .= " AND (g.status IS NULL OR g.status != 'private')";
+        }
+    }
+    $profilePostSql .= " ORDER BY p.created_at DESC";
+    $userPosts = $conn->execute_query($profilePostSql, $profilePostParams)->fetch_all(MYSQLI_ASSOC);
 
 
 
@@ -452,7 +455,7 @@ HTML PART
 
             </svg>
 
-            <span>Groups</span>
+            <span>Community</span>
 
           </a>
 
@@ -860,7 +863,7 @@ HTML PART
 
       <a href="profile.php?id=<?= $profileId ?>&tab=groups" class="profile-tab-item <?= $tab === 'groups' ? 'active' : '' ?>">
 
-        <span>Groups</span>
+        <span>Community</span>
 
         <span class="profile-tab-count"><?= $groupCount ?></span>
 
@@ -969,6 +972,17 @@ HTML PART
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
 
                     <?= (int)$post['reply_count'] ?> replies
+
+                  </span>
+
+                  <span style="display: inline-flex; align-items: center; gap: 6px;">
+
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+
+                    <?= (int)($post['views'] ?? 0) === 1 ? '1 view' : number_format((int)($post['views'] ?? 0)) . ' views' ?>
 
                   </span>
 
@@ -1246,15 +1260,7 @@ HTML PART
 
                         </a>
 
-                        <?php if ($isRestricted): ?>
-
-                          <span class="group-status-badge status-restricted" style="font-size: 10px;">Restricted</span>
-
-                        <?php else: ?>
-
-                          <span class="group-status-badge status-active" style="font-size: 10px;">Active</span>
-
-                        <?php endif; ?>
+                        <?= render_group_status_badge($g['status'] ?? 'public', 'font-size: 10px;') ?>
 
                       </div>
 
@@ -1307,15 +1313,24 @@ HTML PART
 
                   <?php else: ?>
 
-                    <form method="POST" action="index.php?view=groups" style="display:inline;">
-
-                      <input type="hidden" name="action" value="join_group">
-
-                      <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
-
-                      <button type="submit" class="btn-group-action btn-join-group">Join</button>
-
-                    </form>
+                    <?php if (($g['status'] ?? '') === 'private' && !is_admin()): ?>
+                      <?php $hasReq = ($currentUser ? has_group_request((int)$currentUser['id'], (int)$g['id'], $conn) : false); ?>
+                      <?php if ($hasReq): ?>
+                        <span class="btn-group-action" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.35); cursor: default;">Pending</span>
+                      <?php else: ?>
+                        <form method="POST" action="index.php?view=groups" style="display:inline;">
+                          <input type="hidden" name="action" value="join_group">
+                          <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
+                          <button type="submit" class="btn-group-action btn-join-group" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">Request</button>
+                        </form>
+                      <?php endif; ?>
+                    <?php else: ?>
+                      <form method="POST" action="index.php?view=groups" style="display:inline;">
+                        <input type="hidden" name="action" value="join_group">
+                        <input type="hidden" name="group_id" value="<?= (int)$g['id'] ?>">
+                        <button type="submit" class="btn-group-action btn-join-group">Join</button>
+                      </form>
+                    <?php endif; ?>
 
                   <?php endif; ?>
 

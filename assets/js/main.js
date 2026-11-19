@@ -337,8 +337,8 @@ function toggleNestedComposer(replyId) {
     const isHidden = window.getComputedStyle(composer).display === 'none';
     composer.style.display = isHidden ? 'block' : 'none';
     if (isHidden) {
-      const textarea = composer.querySelector('textarea');
-      if (textarea) textarea.focus();
+      const editor = composer.querySelector('.rich-editor') || composer.querySelector('textarea');
+      if (editor) editor.focus();
     }
   }
 }
@@ -352,8 +352,8 @@ function toggleEditReplyForm(replyId) {
     formEl.style.display = isHidden ? 'block' : 'none';
     textEl.style.display = isHidden ? 'none' : 'block';
     if (isHidden) {
-      const ta = formEl.querySelector('textarea');
-      if (ta) ta.focus();
+      const editor = formEl.querySelector('.rich-editor') || formEl.querySelector('textarea');
+      if (editor) editor.focus();
     }
   }
 }
@@ -531,6 +531,7 @@ document.addEventListener('keydown', (e) => {
     closeCreateThreadModal();
     closeEditPostModal();
     closeLightbox();
+    closeGroupMembersModal();
   }
 });
 
@@ -646,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = row.textContent.toLowerCase();
         const rowStatus = row.getAttribute('data-status') || '';
         const matchesText = !q || text.includes(q);
-        const matchesStatus = status === 'all' || rowStatus === status;
+        const matchesStatus = status === 'all' || rowStatus === status || (status === 'public' && (rowStatus === 'public' || rowStatus === 'active'));
         row.style.display = (matchesText && matchesStatus) ? '' : 'none';
       });
     };
@@ -970,57 +971,74 @@ function syncRichEditor(editor) {
   }
   if (!textarea) return;
 
-  const text = editor.innerText.trim();
-  if (text.length === 0) {
+  const rawText = editor.innerText || '';
+  const cleanText = rawText.replace(/\u200B/g, '').trim();
+  const hasFormatting = editor.querySelector('ul, ol, li, h1, h2, h3, h4, h5, h6, s, strike, del, a, b, strong, i, em, u, img');
+
+  if (cleanText.length === 0 && !hasFormatting) {
     textarea.value = '';
     editor.setAttribute('data-empty', 'true');
+  } else if (cleanText.length === 0) {
+    textarea.value = '';
+    editor.removeAttribute('data-empty');
   } else {
-    textarea.value = editor.innerHTML;
+    textarea.value = editor.innerHTML.replace(/\u200B/g, '');
     editor.removeAttribute('data-empty');
   }
   textarea.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 function getActiveRichEditor(toolbar) {
-  // 1. Check focused element
-  const active = document.activeElement;
-  if (active && active.classList.contains('rich-editor')) return active;
-
-  // 2. Check toolbar data-target
+  // 1. Explicit data-target or container on the toolbar takes FIRST priority
   if (toolbar) {
     const targetId = toolbar.getAttribute('data-target');
     if (targetId) {
       const editor = document.getElementById(targetId + '-editor') || document.getElementById(targetId);
-      if (editor && editor.classList.contains('rich-editor')) return editor;
+      if (editor && editor.classList && editor.classList.contains('rich-editor')) return editor;
     }
-    const container = toolbar.closest('form') || toolbar.closest('.x-compose-dialog') || toolbar.closest('.modal-dialog');
+    const container = toolbar.closest('form') ||
+                      toolbar.closest('.reply-composer-form') ||
+                      toolbar.closest('.reply-composer-box') ||
+                      toolbar.closest('.x-compose-dialog') ||
+                      toolbar.closest('.modal-dialog') ||
+                      toolbar.closest('.modal-body') ||
+                      toolbar.parentElement;
     if (container) {
       const editor = container.querySelector('.rich-editor');
       if (editor) return editor;
     }
   }
 
+  // 2. Focused element if it is a rich editor
+  const active = document.activeElement;
+  if (active && active.classList && active.classList.contains('rich-editor')) return active;
+
   // 3. Fallback to open modals
-  const activeModal = document.querySelector('.modal-overlay.active');
+  const activeModal = document.querySelector('.modal-overlay.active, .modal-overlay[style*="display: block"], .modal-overlay[style*="display: flex"]');
   if (activeModal) {
     const editor = activeModal.querySelector('.rich-editor');
     if (editor) return editor;
   }
 
-  return document.getElementById('post-content-editor');
+  // 4. Default post composer only if toolbar belongs to it or no specific toolbar
+  if (!toolbar || toolbar.closest('#modal-create-thread') || toolbar.closest('.x-quick-composer') || toolbar.closest('.x-compose-box')) {
+    const defaultPostEditor = document.getElementById('post-content-editor');
+    if (defaultPostEditor) return defaultPostEditor;
+  }
+
+  return null;
 }
 
 function ensureEditorFocus(editor) {
   if (!editor) return;
-  editor.focus();
+  if (document.activeElement !== editor) {
+    editor.focus();
+  }
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0 || !editor.contains(sel.anchorNode)) {
     const range = document.createRange();
     if (!editor.firstChild) {
-      const p = document.createElement('p');
-      p.innerHTML = '<br>';
-      editor.appendChild(p);
-      range.setStart(p, 0);
+      range.setStart(editor, 0);
       range.collapse(true);
     } else {
       range.selectNodeContents(editor);
@@ -1036,25 +1054,50 @@ function ensureEditorFocus(editor) {
 function updateToolbarStates(editor) {
   if (!editor) {
     editor = document.activeElement;
-    if (!editor || !editor.classList.contains('rich-editor')) return;
+    if (!editor || !editor.classList || !editor.classList.contains('rich-editor')) return;
   }
 
   let isBold = false;
   let isItalic = false;
+  let isUnderline = false;
   let isStrike = false;
   let isHeading = false;
+  let isList = false;
+  let isLink = false;
 
-  try {
-    isBold = document.queryCommandState('bold');
-    isItalic = document.queryCommandState('italic');
-    isStrike = document.queryCommandState('strikeThrough');
-  } catch (e) {}
+  const isFocused = (document.activeElement === editor || editor.contains(document.activeElement));
+
+  if (isFocused) {
+    try {
+      isBold = document.queryCommandState('bold');
+      isItalic = document.queryCommandState('italic');
+      isUnderline = document.queryCommandState('underline');
+      isStrike = document.queryCommandState('strikeThrough');
+      isList = document.queryCommandState('insertUnorderedList');
+    } catch (e) {}
+  }
 
   const sel = window.getSelection();
   if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
     const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
-    if (parent && parent.closest('h1, h2, h3, h4, h5, h6')) {
-      isHeading = true;
+    if (parent) {
+      if (!isFocused) {
+        if (parent.closest('b, strong')) isBold = true;
+        if (parent.closest('i, em')) isItalic = true;
+        if (parent.closest('u')) isUnderline = true;
+        if (parent.closest('s, strike, del') || (window.getComputedStyle(parent).textDecorationLine || '').includes('line-through')) {
+          isStrike = true;
+        }
+      }
+      if (parent.closest('h1, h2, h3, h4, h5, h6')) {
+        isHeading = true;
+      }
+      if (parent.closest('ul, ol, li')) {
+        isList = true;
+      }
+      if (parent.closest('a')) {
+        isLink = true;
+      }
     }
   }
 
@@ -1063,20 +1106,52 @@ function updateToolbarStates(editor) {
     const targetId = tb.getAttribute('data-target');
     const matchesTarget = targetId && (editor.id === targetId || editor.id === targetId + '-editor');
     const sameDialog = (tb.closest('.modal-dialog') && tb.closest('.modal-dialog') === editor.closest('.modal-dialog')) ||
-                       (tb.closest('form') && tb.closest('form') === editor.closest('form'));
+                       (tb.closest('form') && tb.closest('form') === editor.closest('form')) ||
+                       (tb.closest('.reply-composer-box') && tb.closest('.reply-composer-box') === editor.closest('.reply-composer-box')) ||
+                       (tb.closest('.reply-composer-form') && tb.closest('.reply-composer-form') === editor.closest('.reply-composer-form')) ||
+                       (tb.closest('.reply-card') && tb.closest('.reply-card') === editor.closest('.reply-card'));
 
-    if (matchesTarget || sameDialog || (!targetId && !editor.id)) {
+    if (matchesTarget || sameDialog || (!targetId && !editor.id) || (!targetId && editor.id === 'post-content-editor')) {
       const bBtn = tb.querySelector('[data-format="bold"]');
       const iBtn = tb.querySelector('[data-format="italic"]');
+      const uBtn = tb.querySelector('[data-format="underline"]');
       const sBtn = tb.querySelector('[data-format="strike"]');
       const hBtn = tb.querySelector('[data-format="heading"]');
+      const lBtn = tb.querySelector('[data-format="bullet"], [data-format="list"]');
+      const aBtn = tb.querySelector('[data-format="link"]');
 
-      if (bBtn) bBtn.classList.toggle('active', isBold);
-      if (iBtn) iBtn.classList.toggle('active', isItalic);
-      if (sBtn) sBtn.classList.toggle('active', isStrike);
-      if (hBtn) hBtn.classList.toggle('active', isHeading);
+      if (bBtn) bBtn.classList.toggle('active', !!isBold);
+      if (iBtn) iBtn.classList.toggle('active', !!isItalic);
+      if (uBtn) uBtn.classList.toggle('active', !!isUnderline);
+      if (sBtn) sBtn.classList.toggle('active', !!isStrike);
+      if (hBtn) hBtn.classList.toggle('active', !!isHeading);
+      if (lBtn) lBtn.classList.toggle('active', !!isList);
+      if (aBtn) aBtn.classList.toggle('active', !!isLink);
     }
   });
+}
+
+function applyInlineFormat(editor, formatType) {
+  if (!editor) return;
+  ensureEditorFocus(editor);
+
+  const cmdMap = {
+    bold: 'bold',
+    italic: 'italic',
+    underline: 'underline',
+    strike: 'strikeThrough'
+  };
+
+  const cmd = cmdMap[formatType];
+  if (!cmd) return;
+
+  try {
+    document.execCommand('styleWithCSS', false, false);
+    document.execCommand(cmd, false, null);
+  } catch (e) {}
+
+  syncRichEditor(editor);
+  updateToolbarStates(editor);
 }
 
 function applyVisualFormat(editor, formatType) {
@@ -1084,31 +1159,251 @@ function applyVisualFormat(editor, formatType) {
   ensureEditorFocus(editor);
 
   const sel = window.getSelection();
+
   if (formatType === 'heading') {
-    let inHeading = false;
-    if (sel && sel.anchorNode) {
+    let headingNode = null;
+    if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
       const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
-      if (parent && parent.closest('h1, h2, h3, h4, h5, h6')) inHeading = true;
+      headingNode = parent ? parent.closest('h1, h2, h3, h4, h5, h6') : null;
     }
-    document.execCommand('formatBlock', false, inHeading ? '<p>' : '<h3>');
-  } else if (formatType === 'bold') {
-    document.execCommand('bold', false, null);
-  } else if (formatType === 'italic') {
-    document.execCommand('italic', false, null);
-  } else if (formatType === 'strike') {
-    document.execCommand('strikeThrough', false, null);
+
+    if (headingNode) {
+      // Toggle OFF: replace heading with <p>
+      const p = document.createElement('p');
+      while (headingNode.firstChild) {
+        p.appendChild(headingNode.firstChild);
+      }
+      if (!p.firstChild) p.innerHTML = '<br>';
+      headingNode.parentNode.replaceChild(p, headingNode);
+      if (sel) {
+        const range = document.createRange();
+        range.selectNodeContents(p);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } else {
+      // Toggle ON: convert to <h3>
+      const text = editor.innerText.trim();
+      const isEmpty = !text && (!editor.firstChild || editor.innerHTML === '' || editor.innerHTML === '<br>' || editor.innerHTML === '<p><br></p>' || editor.innerHTML === '<div><br></div>');
+      if (isEmpty) {
+        editor.innerHTML = '<h3><br></h3>';
+        const h3 = editor.querySelector('h3');
+        if (h3 && sel) {
+          const range = document.createRange();
+          range.setStart(h3, 0);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } else {
+        try {
+          document.execCommand('formatBlock', false, '<h3>');
+        } catch (e) {}
+
+        const checkNode = sel && sel.anchorNode ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement) : null;
+        if (!checkNode || !checkNode.closest('h1, h2, h3, h4, h5, h6')) {
+          if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+            const range = sel.getRangeAt(0);
+            if (!sel.isCollapsed) {
+              const h3 = document.createElement('h3');
+              h3.appendChild(range.extractContents());
+              range.insertNode(h3);
+              const newRange = document.createRange();
+              newRange.selectNodeContents(h3);
+              sel.removeAllRanges();
+              sel.addRange(newRange);
+            } else {
+              const block = checkNode ? (checkNode.closest('p, div') || checkNode) : null;
+              if (block && block !== editor && block.parentNode === editor) {
+                const h3 = document.createElement('h3');
+                while (block.firstChild) h3.appendChild(block.firstChild);
+                if (!h3.firstChild) h3.innerHTML = '<br>';
+                editor.replaceChild(h3, block);
+                const newRange = document.createRange();
+                newRange.selectNodeContents(h3);
+                newRange.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(newRange);
+              } else {
+                const h3 = document.createElement('h3');
+                h3.innerHTML = '<br>';
+                editor.appendChild(h3);
+                const newRange = document.createRange();
+                newRange.setStart(h3, 0);
+                newRange.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(newRange);
+              }
+            }
+          }
+        }
+      }
+    }
+  } else if (formatType === 'bold' || formatType === 'italic' || formatType === 'underline' || formatType === 'strike') {
+    applyInlineFormat(editor, formatType);
+    return;
+  } else if (formatType === 'bullet' || formatType === 'list') {
+    let listNode = null;
+    if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
+      const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+      listNode = parent ? parent.closest('ul, ol') : null;
+    }
+
+    if (listNode) {
+      // Toggle OFF: unwrap list items into <p>s
+      const parent = listNode.parentNode;
+      const frag = document.createDocumentFragment();
+      Array.from(listNode.querySelectorAll('li')).forEach(li => {
+        const p = document.createElement('p');
+        while (li.firstChild) p.appendChild(li.firstChild);
+        if (!p.firstChild) p.innerHTML = '<br>';
+        frag.appendChild(p);
+      });
+      parent.replaceChild(frag, listNode);
+      if (sel) {
+        const lastP = editor.querySelector('p:last-of-type') || editor;
+        const range = document.createRange();
+        range.selectNodeContents(lastP);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    } else {
+      // Toggle ON:
+      const text = editor.innerText.trim();
+      const isEmpty = !text && (!editor.firstChild || editor.innerHTML === '' || editor.innerHTML === '<br>' || editor.innerHTML === '<p><br></p>' || editor.innerHTML === '<div><br></div>');
+      if (isEmpty) {
+        editor.innerHTML = '<ul><li><br></li></ul>';
+        const li = editor.querySelector('li');
+        if (li && sel) {
+          const range = document.createRange();
+          range.setStart(li, 0);
+          range.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      } else {
+        try {
+          document.execCommand('insertUnorderedList', false, null);
+        } catch (e) {}
+
+        const checkNode = sel && sel.anchorNode ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement) : null;
+        if (!checkNode || !checkNode.closest('ul, ol, li')) {
+          if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+            const range = sel.getRangeAt(0);
+            const ul = document.createElement('ul');
+            const li = document.createElement('li');
+            if (!sel.isCollapsed) {
+              li.appendChild(range.extractContents());
+            } else {
+              li.innerHTML = '<br>';
+            }
+            ul.appendChild(li);
+            range.insertNode(ul);
+            const newRange = document.createRange();
+            newRange.setStart(li, 0);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+          }
+        }
+      }
+    }
+  } else if (formatType === 'link') {
+    let linkNode = null;
+    if (sel && sel.anchorNode && editor.contains(sel.anchorNode)) {
+      const parent = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement;
+      linkNode = parent ? parent.closest('a') : null;
+    }
+
+    if (linkNode) {
+      // Toggle OFF: Unlink
+      const parent = linkNode.parentNode;
+      const range = document.createRange();
+      range.selectNodeContents(linkNode);
+      while (linkNode.firstChild) {
+        parent.insertBefore(linkNode.firstChild, linkNode);
+      }
+      parent.removeChild(linkNode);
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      syncRichEditor(editor);
+      updateToolbarStates(editor);
+      return;
+    }
+
+    // Toggle ON:
+    let savedRange = null;
+    let selectedText = '';
+    if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+      savedRange = sel.getRangeAt(0).cloneRange();
+      if (!sel.isCollapsed) {
+        selectedText = sel.toString().trim();
+      }
+    }
+
+    const defaultUrl = 'https://';
+    let url = window.prompt('Enter URL (https://...):', defaultUrl);
+    if (!url || !url.trim() || url.trim() === 'https://') return;
+    url = url.trim();
+    if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) {
+      url = 'https://' + url;
+    }
+
+    editor.focus();
+
+    const linkText = selectedText || url;
+    const a = document.createElement('a');
+    a.href = url;
+    a.textContent = linkText;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+
+    if (savedRange && editor.contains(savedRange.commonAncestorContainer)) {
+      savedRange.deleteContents();
+      savedRange.insertNode(a);
+      const space = document.createTextNode('\u00A0');
+      if (a.nextSibling) {
+        a.parentNode.insertBefore(space, a.nextSibling);
+      } else {
+        a.parentNode.appendChild(space);
+      }
+      const newRange = document.createRange();
+      newRange.setStartAfter(space);
+      newRange.collapse(true);
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+    } else {
+      editor.appendChild(a);
+      const space = document.createTextNode('\u00A0');
+      editor.appendChild(space);
+      if (sel) {
+        const newRange = document.createRange();
+        newRange.setStartAfter(space);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+    }
   }
 
   syncRichEditor(editor);
   updateToolbarStates(editor);
 }
 
-// Prevent format buttons from stealing selection focus on mousedown
-document.addEventListener('mousedown', (e) => {
-  const btn = e.target.closest('.format-btn');
-  if (btn) {
-    e.preventDefault();
-  }
+// Prevent format buttons from stealing selection focus on mousedown / pointerdown / touchstart
+['mousedown', 'pointerdown', 'touchstart'].forEach(evtName => {
+  document.addEventListener(evtName, (e) => {
+    const btn = e.target.closest('.format-btn');
+    if (btn) {
+      e.preventDefault();
+    }
+  });
 });
 
 // Click listener for format buttons
@@ -1127,8 +1422,11 @@ document.addEventListener('click', (e) => {
       openCreateThreadModal();
       setTimeout(() => {
         const editor = document.getElementById('post-content-editor');
-        if (editor) applyVisualFormat(editor, format);
-      }, 100);
+        if (editor) {
+          editor.focus();
+          applyVisualFormat(editor, format);
+        }
+      }, 150);
       return;
     }
   }
@@ -1147,9 +1445,28 @@ document.addEventListener('click', (e) => {
     const end = textarea.selectionEnd ?? 0;
     const val = textarea.value;
     const selected = val.substring(start, end);
-    const wrap = { bold: ['**', '**'], italic: ['*', '*'], strike: ['~~', '~~'], heading: ['## ', ''] }[format] || ['**', '**'];
-    if (selected.length > 0) {
-      textarea.value = val.substring(0, start) + wrap[0] + selected + wrap[1] + val.substring(end);
+    if (format === 'bullet' || format === 'list') {
+      const prefix = (start > 0 && val[start - 1] !== '\n') ? '\n' : '';
+      const replacement = prefix + '• ' + (selected || '');
+      textarea.setRangeText(replacement, start, end, 'end');
+    } else if (format === 'link') {
+      let url = prompt('Enter URL (https://...):', 'https://');
+      if (url && url.trim() && url.trim() !== 'https://') {
+        url = url.trim();
+        if (!/^https?:\/\//i.test(url) && !url.startsWith('/')) {
+          url = 'https://' + url;
+        }
+        const text = selected || prompt('Enter text to display:', url) || url;
+        const replacement = '[' + text + '](' + url + ')';
+        textarea.setRangeText(replacement, start, end, 'end');
+      }
+    } else {
+      const wrap = { bold: ['**', '**'], italic: ['*', '*'], underline: ['<u>', '</u>'], strike: ['~~', '~~'], heading: ['## ', ''] }[format] || ['**', '**'];
+      if (selected.length > 0) {
+        textarea.value = val.substring(0, start) + wrap[0] + selected + wrap[1] + val.substring(end);
+      } else {
+        textarea.setRangeText(wrap[0] + 'text' + wrap[1], start, end, 'select');
+      }
     }
     textarea.focus();
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -1194,9 +1511,404 @@ document.addEventListener('submit', (e) => {
   const form = e.target;
   if (form) {
     form.querySelectorAll('.rich-editor').forEach(syncRichEditor);
+    if (form.classList.contains('reply-composer-form')) {
+      const editor = form.querySelector('.rich-editor');
+      const fileInput = form.querySelector('input[name="reply_image"]');
+      const hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+      if (editor) {
+        const text = (editor.innerText || '').replace(/\u200B/g, '').trim();
+        const hasList = editor.querySelector('ul, ol, li');
+        if (!text && !hasList && !hasFile) {
+          e.preventDefault();
+          editor.focus();
+        }
+      }
+    }
+  }
+});
+
+// Keyboard shortcuts for formatting (Ctrl/Cmd + B, I, U)
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+    const key = (e.key || '').toLowerCase();
+    let format = null;
+    if (key === 'b') format = 'bold';
+    else if (key === 'i') format = 'italic';
+    else if (key === 'u') format = 'underline';
+
+    if (format) {
+      const active = document.activeElement;
+      if (active && active.classList && active.classList.contains('rich-editor')) {
+        e.preventDefault();
+        applyVisualFormat(active, format);
+      }
+    }
   }
 });
 
 window.syncRichEditor = syncRichEditor;
 window.applyVisualFormat = applyVisualFormat;
 window.updateToolbarStates = updateToolbarStates;
+
+// ========================================================
+// GROUP MEMBERS MODAL (View, Remove & Ban Members)
+// ========================================================
+let currentMembersGroupId = 0;
+let groupMembersCache = { members: [], banned: [] };
+
+function openGroupMembersModal(groupId, groupName) {
+  currentMembersGroupId = parseInt(groupId, 10) || 0;
+  if (!currentMembersGroupId) return;
+
+  const modal = document.getElementById('group-members-modal');
+  if (!modal) return;
+
+  const headerText = document.getElementById('group-members-header-text');
+  if (headerText) {
+    headerText.textContent = (groupName ? groupName + ' – ' : '') + 'Community Members';
+  }
+
+  const searchInput = document.getElementById('group-members-search');
+  if (searchInput) searchInput.value = '';
+
+  switchGroupMembersTab('active');
+  modal.classList.add('active');
+
+  loadGroupMembersData(currentMembersGroupId);
+}
+
+function closeGroupMembersModal() {
+  const modal = document.getElementById('group-members-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function switchGroupMembersTab(tab) {
+  const activeTabBtn = document.getElementById('tab-active-members');
+  const bannedTabBtn = document.getElementById('tab-banned-members');
+  const activeList = document.getElementById('group-active-members-list');
+  const bannedList = document.getElementById('group-banned-members-list');
+
+  if (tab === 'banned') {
+    if (activeTabBtn) activeTabBtn.classList.remove('active');
+    if (bannedTabBtn) bannedTabBtn.classList.add('active');
+    if (activeList) activeList.style.display = 'none';
+    if (bannedList) bannedList.style.display = 'flex';
+  } else {
+    if (activeTabBtn) activeTabBtn.classList.add('active');
+    if (bannedTabBtn) bannedTabBtn.classList.remove('active');
+    if (activeList) activeList.style.display = 'flex';
+    if (bannedList) bannedList.style.display = 'none';
+  }
+  filterGroupMembersList();
+}
+
+function loadGroupMembersData(groupId) {
+  const loadingEl = document.getElementById('group-members-loading');
+  const activeList = document.getElementById('group-active-members-list');
+  const bannedList = document.getElementById('group-banned-members-list');
+  const emptyEl = document.getElementById('group-members-empty');
+
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (activeList) activeList.innerHTML = '';
+  if (bannedList) bannedList.innerHTML = '';
+  if (emptyEl) emptyEl.style.display = 'none';
+
+  fetch(`index.php?action=get_group_members&group_id=${groupId}`, {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (!data.success) {
+        if (emptyEl) {
+          emptyEl.textContent = data.message || 'Could not load group members.';
+          emptyEl.style.display = 'block';
+        }
+        return;
+      }
+
+      groupMembersCache.members = data.members || [];
+      groupMembersCache.banned = data.banned || [];
+
+      // Update badge counts
+      const countActive = document.getElementById('count-active-members');
+      if (countActive) countActive.textContent = groupMembersCache.members.length;
+      const countBanned = document.getElementById('count-banned-members');
+      if (countBanned) countBanned.textContent = groupMembersCache.banned.length;
+
+      // Render Active Members
+      renderActiveMembers(groupMembersCache.members, data.is_admin, groupId);
+
+      // Render Banned Members
+      renderBannedMembers(groupMembersCache.banned, data.is_admin, groupId);
+
+      filterGroupMembersList();
+    })
+    .catch(() => {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (emptyEl) {
+        emptyEl.textContent = 'Failed to load group members. Please try again.';
+        emptyEl.style.display = 'block';
+      }
+    });
+}
+
+function escapeHtml(text) {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderActiveMembers(members, isAdmin, groupId) {
+  const container = document.getElementById('group-active-members-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!members || members.length === 0) {
+    return;
+  }
+
+  members.forEach(m => {
+    const item = document.createElement('div');
+    item.className = 'group-member-item';
+    item.setAttribute('data-name', (m.name || '').toLowerCase());
+    item.setAttribute('data-username', (m.username || '').toLowerCase());
+
+    const roleBadge = m.is_creator
+      ? `<span class="gm-badge gm-badge-creator">Creator</span>`
+      : m.role === 'admin'
+      ? `<span class="gm-badge gm-badge-admin">Admin</span>`
+      : m.role === 'faculty'
+      ? `<span class="gm-badge gm-badge-faculty">Faculty</span>`
+      : `<span class="gm-badge gm-badge-student">Student</span>`;
+
+    let actionsHtml = '';
+    if (isAdmin && m.can_moderate) {
+      actionsHtml = `
+        <div class="group-member-actions" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+          <button type="button" class="btn-gm-remove" onclick="confirmRemoveMember(${groupId}, ${m.id}, '${escapeHtml(m.name)}')" title="Remove member from this group">
+            Remove
+          </button>
+          <button type="button" class="btn-gm-ban" onclick="confirmBanMember(${groupId}, ${m.id}, '${escapeHtml(m.name)}')" title="Ban user from this group">
+            Ban
+          </button>
+        </div>
+      `;
+    } else if (m.is_self) {
+      actionsHtml = `<span style="font-size: 11.5px; color: var(--text-dim); padding: 4px 8px; border-radius: 9999px; background: rgba(255,255,255,0.05);">You</span>`;
+    }
+
+    item.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+        <a href="profile.php?id=${m.id}" style="flex-shrink: 0;">
+          <img src="${escapeHtml(m.avatar)}" alt="${escapeHtml(m.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color); display: block;" onerror="this.src='assets/images/default-avatar.svg'">
+        </a>
+        <div style="min-width: 0; flex: 1;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <a href="profile.php?id=${m.id}" style="font-weight: 700; font-size: 13.5px; color: var(--text-main); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${escapeHtml(m.name)}
+            </a>
+            ${roleBadge}
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">
+            ${m.username ? '@' + escapeHtml(m.username) + ' · ' : ''}Joined ${escapeHtml(m.joined_formatted)}
+          </div>
+        </div>
+      </div>
+      ${actionsHtml}
+    `;
+    container.appendChild(item);
+  });
+}
+
+function renderBannedMembers(banned, isAdmin, groupId) {
+  const container = document.getElementById('group-banned-members-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!banned || banned.length === 0) {
+    return;
+  }
+
+  banned.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'group-member-item';
+    item.setAttribute('data-name', (b.name || '').toLowerCase());
+    item.setAttribute('data-username', (b.username || '').toLowerCase());
+
+    item.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;">
+        <a href="profile.php?id=${b.id}" style="flex-shrink: 0;">
+          <img src="${escapeHtml(b.avatar)}" alt="${escapeHtml(b.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(239, 68, 68, 0.35); display: block;" onerror="this.src='assets/images/default-avatar.svg'">
+        </a>
+        <div style="min-width: 0; flex: 1;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+            <a href="profile.php?id=${b.id}" style="font-weight: 700; font-size: 13.5px; color: var(--text-main); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+              ${escapeHtml(b.name)}
+            </a>
+            <span class="gm-badge gm-badge-banned">Banned</span>
+          </div>
+          <div style="font-size: 12px; color: var(--text-dim); margin-top: 2px;">
+            Banned ${escapeHtml(b.banned_formatted)} by ${escapeHtml(b.banned_by)}
+          </div>
+        </div>
+      </div>
+      ${isAdmin ? `
+        <div class="group-member-actions" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+          <button type="button" class="btn-gm-unban" onclick="confirmUnbanMember(${groupId}, ${b.id}, '${escapeHtml(b.name)}')" title="Unban user from this group">
+            Unban
+          </button>
+        </div>
+      ` : ''}
+    `;
+    container.appendChild(item);
+  });
+}
+
+function filterGroupMembersList() {
+  const searchInput = document.getElementById('group-members-search');
+  const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
+  const activeTabBtn = document.getElementById('tab-active-members');
+  const isBannedTab = !activeTabBtn || !activeTabBtn.classList.contains('active');
+  const container = isBannedTab
+    ? document.getElementById('group-banned-members-list')
+    : document.getElementById('group-active-members-list');
+  const emptyEl = document.getElementById('group-members-empty');
+
+  if (!container) return;
+
+  const items = container.querySelectorAll('.group-member-item');
+  let visibleCount = 0;
+
+  items.forEach(item => {
+    const name = item.getAttribute('data-name') || '';
+    const username = item.getAttribute('data-username') || '';
+    if (!query || name.includes(query) || username.includes(query)) {
+      item.style.display = 'flex';
+      visibleCount++;
+    } else {
+      item.style.display = 'none';
+    }
+  });
+
+  if (emptyEl) {
+    if (visibleCount === 0) {
+      emptyEl.textContent = query
+        ? `No members found matching "${query}".`
+        : (isBannedTab ? 'No banned users in this group.' : 'No members found in this group.');
+      emptyEl.style.display = 'block';
+    } else {
+      emptyEl.style.display = 'none';
+    }
+  }
+}
+
+function confirmRemoveMember(groupId, userId, userName) {
+  if (!confirm(`Are you sure you want to remove "${userName}" from this community?\n\nThey will be removed from the members list.`)) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('action', 'remove_group_member');
+  formData.append('group_id', groupId);
+  formData.append('user_id', userId);
+  formData.append('ajax', '1');
+
+  fetch('index.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof showToast === 'function') {
+          showToast(data.message || 'Member removed successfully.');
+        }
+        const headerCount = document.getElementById('group-header-member-count');
+        if (headerCount && data.member_count !== undefined) {
+          headerCount.textContent = data.member_count;
+        }
+        loadGroupMembersData(groupId);
+      } else {
+        alert(data.message || 'Failed to remove member.');
+      }
+    })
+    .catch(() => alert('Network error while removing member.'));
+}
+
+function confirmBanMember(groupId, userId, userName) {
+  if (!confirm(`Are you sure you want to BAN "${userName}" from this community?\n\nThey will be removed immediately and blocked from rejoining or posting in this group.`)) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('action', 'ban_group_member');
+  formData.append('group_id', groupId);
+  formData.append('user_id', userId);
+  formData.append('ajax', '1');
+
+  fetch('index.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof showToast === 'function') {
+          showToast(data.message || 'User has been banned from this group.');
+        }
+        const headerCount = document.getElementById('group-header-member-count');
+        if (headerCount && data.member_count !== undefined) {
+          headerCount.textContent = data.member_count;
+        }
+        loadGroupMembersData(groupId);
+      } else {
+        alert(data.message || 'Failed to ban member.');
+      }
+    })
+    .catch(() => alert('Network error while banning member.'));
+}
+
+function confirmUnbanMember(groupId, userId, userName) {
+  if (!confirm(`Unban "${userName}" from this community?\n\nThey will be able to rejoin the group.`)) {
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('action', 'unban_group_member');
+  formData.append('group_id', groupId);
+  formData.append('user_id', userId);
+  formData.append('ajax', '1');
+
+  fetch('index.php', {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (typeof showToast === 'function') {
+          showToast(data.message || 'User unbanned successfully.');
+        }
+        loadGroupMembersData(groupId);
+      } else {
+        alert(data.message || 'Failed to unban user.');
+      }
+    })
+    .catch(() => alert('Network error while unbanning user.'));
+}
+
+window.openGroupMembersModal = openGroupMembersModal;
+window.closeGroupMembersModal = closeGroupMembersModal;
+window.switchGroupMembersTab = switchGroupMembersTab;
+window.filterGroupMembersList = filterGroupMembersList;
+window.confirmRemoveMember = confirmRemoveMember;
+window.confirmBanMember = confirmBanMember;
+window.confirmUnbanMember = confirmUnbanMember;

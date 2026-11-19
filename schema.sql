@@ -82,7 +82,7 @@ CREATE TABLE `groups` (
   `name` VARCHAR(100) NOT NULL,
   `description` TEXT NULL,
   `image_url` LONGTEXT NULL,
-  `status` ENUM('active', 'restricted') NOT NULL DEFAULT 'active',
+  `status` ENUM('public', 'private', 'restricted', 'active') NOT NULL DEFAULT 'public',
   `created_by` INT NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX `idx_groups_status` (`status`),
@@ -101,6 +101,20 @@ CREATE TABLE `group_members` (
   UNIQUE KEY `idx_group_user_unique` (`group_id`, `user_id`),
   CONSTRAINT `fk_gm_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_gm_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 7b. Table: group_requests
+-- Pending membership requests for private groups
+-- ============================================================
+CREATE TABLE `group_requests` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `group_id` INT NOT NULL,
+  `user_id` INT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `idx_gr_unique` (`group_id`, `user_id`),
+  CONSTRAINT `fk_gr_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_gr_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -156,4 +170,20 @@ CREATE TABLE `replies` (
   CONSTRAINT `fk_replies_post` FOREIGN KEY (`post_id`) REFERENCES `posts` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_replies_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_replies_parent` FOREIGN KEY (`parent_id`) REFERENCES `replies` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- 11. Table: group_notices
+-- Admin important announcements/notices per group (read-only)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `group_notices` (
+  `id` INT AUTO_INCREMENT PRIMARY KEY,
+  `group_id` INT NOT NULL,
+  `user_id` INT NOT NULL,
+  `headline` VARCHAR(255) NOT NULL,
+  `message` LONGTEXT NOT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_group_notices_group` (`group_id`),
+  CONSTRAINT `fk_group_notices_group` FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_group_notices_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
