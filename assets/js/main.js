@@ -810,16 +810,239 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Admin Console: Live Moderation Post Search
+  // Admin Console: Live Moderation Post Search, Filters & 15-per-page Pagination
   const adminPostsSearch = document.getElementById('admin-posts-search');
+  const adminPostsGroup = document.getElementById('admin-posts-group-filter');
+  const adminPostsActivity = document.getElementById('admin-posts-activity-filter');
+  const adminPostsSort = document.getElementById('admin-posts-sort-filter');
+  const adminPostsReset = document.getElementById('admin-posts-reset-filters');
   const adminPostsTable = document.getElementById('admin-posts-table');
-  if (adminPostsSearch && adminPostsTable) {
-    adminPostsSearch.addEventListener('input', () => {
-      const q = adminPostsSearch.value.trim().toLowerCase();
-      adminPostsTable.querySelectorAll('tbody tr').forEach((row) => {
-        row.style.display = (!q || row.textContent.toLowerCase().includes(q)) ? '' : 'none';
+  const adminPostsNoResults = document.getElementById('admin-posts-no-results');
+  const adminPostsPagination = document.getElementById('admin-posts-pagination');
+  const adminPostsPaginationControls = document.getElementById('admin-posts-pagination-controls');
+  const adminPostsShowingStart = document.getElementById('admin-posts-showing-start');
+  const adminPostsShowingEnd = document.getElementById('admin-posts-showing-end');
+  const adminPostsTotalCount = document.getElementById('admin-posts-total-count');
+
+  if (adminPostsTable && (adminPostsSearch || adminPostsGroup || adminPostsActivity || adminPostsSort)) {
+    const PAGE_SIZE = 15;
+    let currentModerationPage = 1;
+
+    const renderPaginationControls = (totalPages, currentPage) => {
+      if (!adminPostsPaginationControls) return;
+      adminPostsPaginationControls.innerHTML = '';
+      adminPostsPaginationControls.style.display = 'flex';
+
+      // Previous button
+      const prevBtn = document.createElement('button');
+      prevBtn.type = 'button';
+      prevBtn.className = 'admin-page-btn' + (currentPage <= 1 ? ' disabled' : '');
+      prevBtn.innerHTML = `&larr; Prev`;
+      prevBtn.disabled = (currentPage <= 1);
+      prevBtn.setAttribute('aria-label', 'Previous page');
+      prevBtn.addEventListener('click', () => {
+        if (currentModerationPage > 1) {
+          currentModerationPage--;
+          filterAdminPosts(false);
+        }
       });
-    });
+      adminPostsPaginationControls.appendChild(prevBtn);
+
+      // Google-style window of page numbers
+      const getPageList = () => {
+        if (totalPages <= 7) {
+          return Array.from({ length: Math.max(1, totalPages) }, (_, i) => i + 1);
+        }
+        if (currentPage <= 4) {
+          return [1, 2, 3, 4, 5, '...', totalPages];
+        }
+        if (currentPage >= totalPages - 3) {
+          return [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        }
+        return [1, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages];
+      };
+
+      const pages = getPageList();
+      pages.forEach((p) => {
+        if (p === '...') {
+          const ellipsis = document.createElement('span');
+          ellipsis.className = 'admin-page-ellipsis';
+          ellipsis.textContent = '…';
+          adminPostsPaginationControls.appendChild(ellipsis);
+        } else {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'admin-page-btn' + (p === currentPage ? ' active' : '');
+          btn.textContent = p;
+          btn.setAttribute('aria-label', `Page ${p}`);
+          if (p === currentPage) {
+            btn.setAttribute('aria-current', 'page');
+          } else {
+            btn.addEventListener('click', () => {
+              currentModerationPage = p;
+              filterAdminPosts(false);
+            });
+          }
+          adminPostsPaginationControls.appendChild(btn);
+        }
+      });
+
+      // Next button
+      const nextBtn = document.createElement('button');
+      nextBtn.type = 'button';
+      nextBtn.className = 'admin-page-btn' + (currentPage >= totalPages ? ' disabled' : '');
+      nextBtn.innerHTML = `Next &rarr;`;
+      nextBtn.disabled = (currentPage >= totalPages);
+      nextBtn.setAttribute('aria-label', 'Next page');
+      nextBtn.addEventListener('click', () => {
+        if (currentModerationPage < totalPages) {
+          currentModerationPage++;
+          filterAdminPosts(false);
+        }
+      });
+      adminPostsPaginationControls.appendChild(nextBtn);
+    };
+
+    const filterAdminPosts = (resetPage = false) => {
+      if (resetPage) {
+        currentModerationPage = 1;
+      }
+
+      const q = (adminPostsSearch ? adminPostsSearch.value.trim().toLowerCase() : '');
+      const selectedGroup = (adminPostsGroup ? adminPostsGroup.value : 'all');
+      const selectedActivity = (adminPostsActivity ? adminPostsActivity.value : 'all');
+      const selectedSort = (adminPostsSort ? adminPostsSort.value : 'newest');
+
+      const tbody = adminPostsTable.querySelector('tbody');
+      if (!tbody) return;
+
+      const rows = Array.from(tbody.querySelectorAll('tr[data-post-id]'));
+      const matchingRows = [];
+
+      rows.forEach((row) => {
+        const title = row.getAttribute('data-title') || '';
+        const groupName = row.getAttribute('data-group-name') || '';
+        const author = row.getAttribute('data-author') || '';
+        const groupId = row.getAttribute('data-group-id') || '';
+        const replies = parseInt(row.getAttribute('data-replies') || '0', 10);
+
+        // Search match
+        const matchesSearch = !q ||
+          title.includes(q) ||
+          groupName.includes(q) ||
+          author.includes(q);
+
+        // Group match
+        const matchesGroup = (selectedGroup === 'all' || selectedGroup === groupId);
+
+        // Activity match
+        let matchesActivity = true;
+        if (selectedActivity === 'has_replies') {
+          matchesActivity = (replies > 0);
+        } else if (selectedActivity === 'no_replies') {
+          matchesActivity = (replies === 0);
+        }
+
+        if (matchesSearch && matchesGroup && matchesActivity) {
+          matchingRows.push(row);
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      // Sort matching rows
+      matchingRows.sort((a, b) => {
+        const timeA = parseInt(a.getAttribute('data-timestamp') || '0', 10);
+        const timeB = parseInt(b.getAttribute('data-timestamp') || '0', 10);
+        const repA = parseInt(a.getAttribute('data-replies') || '0', 10);
+        const repB = parseInt(b.getAttribute('data-replies') || '0', 10);
+
+        if (selectedSort === 'newest') return timeB - timeA;
+        if (selectedSort === 'oldest') return timeA - timeB;
+        if (selectedSort === 'most_replies') return repB - repA || (timeB - timeA);
+        if (selectedSort === 'fewest_replies') return repA - repB || (timeB - timeA);
+        return 0;
+      });
+
+      // Re-append sorted rows into DOM
+      matchingRows.forEach((r) => tbody.appendChild(r));
+
+      // Calculate pagination
+      const totalMatching = matchingRows.length;
+      const totalPages = Math.ceil(totalMatching / PAGE_SIZE) || 1;
+      if (currentModerationPage > totalPages) {
+        currentModerationPage = totalPages;
+      }
+      if (currentModerationPage < 1) {
+        currentModerationPage = 1;
+      }
+
+      const startIndex = (currentModerationPage - 1) * PAGE_SIZE;
+      const endIndex = startIndex + PAGE_SIZE;
+
+      matchingRows.forEach((row, idx) => {
+        if (idx >= startIndex && idx < endIndex) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+
+      // Empty State Handling
+      if (adminPostsNoResults) {
+        if (totalMatching === 0) {
+          tbody.appendChild(adminPostsNoResults);
+          adminPostsNoResults.style.display = '';
+        } else {
+          adminPostsNoResults.style.display = 'none';
+        }
+      }
+
+      // Update Pagination summary info
+      if (adminPostsPagination) {
+        if (totalMatching === 0) {
+          adminPostsPagination.style.display = 'none';
+        } else {
+          adminPostsPagination.style.display = 'flex';
+          const displayStart = startIndex + 1;
+          const displayEnd = Math.min(endIndex, totalMatching);
+          if (adminPostsShowingStart) adminPostsShowingStart.textContent = displayStart;
+          if (adminPostsShowingEnd) adminPostsShowingEnd.textContent = displayEnd;
+          if (adminPostsTotalCount) adminPostsTotalCount.textContent = totalMatching;
+          const curPageEl = document.getElementById('admin-posts-current-page');
+          const totalPagesEl = document.getElementById('admin-posts-total-pages');
+          if (curPageEl) curPageEl.textContent = currentModerationPage;
+          if (totalPagesEl) totalPagesEl.textContent = totalPages;
+        }
+      }
+
+      // Render Google-style page buttons
+      renderPaginationControls(totalPages, currentModerationPage);
+
+      // Toggle Reset Button
+      if (adminPostsReset) {
+        const isFiltered = (q !== '' || selectedGroup !== 'all' || selectedActivity !== 'all' || selectedSort !== 'newest');
+        adminPostsReset.style.display = isFiltered ? 'inline-flex' : 'none';
+      }
+    };
+
+    if (adminPostsSearch) adminPostsSearch.addEventListener('input', () => filterAdminPosts(true));
+    if (adminPostsGroup) adminPostsGroup.addEventListener('change', () => filterAdminPosts(true));
+    if (adminPostsActivity) adminPostsActivity.addEventListener('change', () => filterAdminPosts(true));
+    if (adminPostsSort) adminPostsSort.addEventListener('change', () => filterAdminPosts(true));
+
+    if (adminPostsReset) {
+      adminPostsReset.addEventListener('click', () => {
+        if (adminPostsSearch) adminPostsSearch.value = '';
+        if (adminPostsGroup) adminPostsGroup.value = 'all';
+        if (adminPostsActivity) adminPostsActivity.value = 'all';
+        if (adminPostsSort) adminPostsSort.value = 'newest';
+        filterAdminPosts(true);
+      });
+    }
+
+    // Initial run to activate 15 items per page pagination
+    filterAdminPosts(false);
   }
 
   // Admin Subnav Active State
@@ -1614,7 +1837,8 @@ function loadGroupMembersData(groupId) {
   if (emptyEl) emptyEl.style.display = 'none';
 
   fetch(`index.php?action=get_group_members&group_id=${groupId}`, {
-    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    credentials: 'same-origin'
   })
     .then(res => res.json())
     .then(data => {
@@ -1682,9 +1906,7 @@ function renderActiveMembers(members, isAdmin, groupId) {
       ? `<span class="gm-badge gm-badge-creator">Creator</span>`
       : m.role === 'admin'
       ? `<span class="gm-badge gm-badge-admin">Admin</span>`
-      : m.role === 'faculty'
-      ? `<span class="gm-badge gm-badge-faculty">Faculty</span>`
-      : `<span class="gm-badge gm-badge-student">Student</span>`;
+      : `<span class="gm-badge gm-badge-student">User</span>`;
 
     let actionsHtml = '';
     if (isAdmin && m.can_moderate) {
@@ -1778,6 +2000,12 @@ function filterGroupMembersList() {
     ? document.getElementById('group-banned-members-list')
     : document.getElementById('group-active-members-list');
   const emptyEl = document.getElementById('group-members-empty');
+  const loadingEl = document.getElementById('group-members-loading');
+
+  if (loadingEl && loadingEl.style.display !== 'none') {
+    if (emptyEl) emptyEl.style.display = 'none';
+    return;
+  }
 
   if (!container) return;
 

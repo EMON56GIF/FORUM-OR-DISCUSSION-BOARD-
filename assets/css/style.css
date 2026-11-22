@@ -3865,7 +3865,7 @@ a.post-group-author-link:hover .author-name {
 /* Unified Metric Strip */
 .admin-stats-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-card);
@@ -3997,16 +3997,124 @@ a.post-group-author-link:hover .author-name {
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 0 28px 0 10px;
+  height: 34px;
   font-size: 12.5px;
   font-weight: 600;
   color: var(--text-main);
   cursor: pointer;
   outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+}
+
+.admin-filter-select:hover {
+  border-color: var(--border-hover);
+  background-color: var(--bg-widget-hover);
 }
 
 .admin-filter-select:focus {
   border-color: var(--primary-blue);
+  box-shadow: 0 0 0 2px var(--primary-blue-light);
+}
+
+.admin-filter-select option {
+  background: #18191c;
+  color: #f1f5f9;
+}
+
+/* ======================================================== */
+/* Google-style Pagination Footer for Admin Moderation       */
+/* ======================================================== */
+.admin-pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 20px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border-color);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.admin-pagination-info {
+  font-size: 13px;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.admin-pagination-info strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.admin-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.admin-page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.admin-page-btn:hover:not(:disabled):not(.active) {
+  color: var(--text-main);
+  border-color: var(--border-hover);
+  background: var(--bg-widget-hover);
+}
+
+.admin-page-btn.active {
+  color: #ffffff !important;
+  background: var(--primary-blue) !important;
+  border-color: var(--primary-blue) !important;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(29, 155, 240, 0.35);
+  cursor: default;
+}
+
+.admin-page-btn:disabled,
+.admin-page-btn.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.admin-page-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 32px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 700;
+  user-select: none;
 }
 
 /* Custom Admin Status Filter Dropdown */
@@ -5488,12 +5596,15 @@ select:focus-visible {
 /* ======================================================== */
 .group-meta-members-btn {
   transition: all 0.15s ease;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.group-meta-members-btn:hover {
+  color: var(--primary-blue) !important;
 }
 .group-meta-members-btn:hover .group-meta-num {
   color: var(--primary-blue) !important;
-}
-.group-meta-members-btn:hover {
-  color: var(--text-main) !important;
 }
 
 .gm-tab-btn {

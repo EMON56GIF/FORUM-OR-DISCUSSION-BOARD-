@@ -450,9 +450,13 @@ if ($action === 'leave_group') {
 // GROUP MEMBER MANAGEMENT (View, Remove & Ban Members)
 // ========================================================
 
-// 1. Fetch Group Members (AJAX)
+// 1. Fetch Group Members (AJAX - Admin Only)
 if ($action === 'get_group_members') {
     header('Content-Type: application/json');
+    if (!is_admin()) {
+        echo json_encode(['success' => false, 'message' => 'Unauthorized. Only administrators can view and manage community members.']);
+        exit;
+    }
     $groupId = (int)($_REQUEST['group_id'] ?? 0);
     if ($groupId <= 0) {
         echo json_encode(['success' => false, 'message' => 'Invalid group ID.']);
@@ -1580,7 +1584,7 @@ if ($current_view === 'admin') {
 
         ORDER BY p.created_at DESC
 
-        LIMIT 25
+        LIMIT 500
 
     ")->fetch_all(MYSQLI_ASSOC);
 
@@ -1592,9 +1596,9 @@ if ($current_view === 'admin') {
 
     $stats['total_posts'] = (int)$conn->query("SELECT COUNT(*) FROM posts")->fetch_row()[0];
 
-    $stats['total_students'] = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetch_row()[0];
+    $stats['total_users'] = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role != 'admin'")->fetch_row()[0];
 
-    $stats['total_faculty'] = (int)$conn->query("SELECT COUNT(*) FROM users WHERE role = 'faculty'")->fetch_row()[0];
+    $stats['total_students'] = $stats['total_users'];
 
 }
 
@@ -2072,7 +2076,7 @@ HTML PART starts here
 
             <?php else: ?>
 
-              <span class="user-role-badge badge-student">Student</span>
+              <span class="user-role-badge badge-student">User</span>
 
             <?php endif; ?>
 
@@ -2513,19 +2517,10 @@ HTML PART starts here
             <div class="admin-stat-card">
               <div class="admin-stat-label">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                <span>Students</span>
+                <span>Users</span>
               </div>
-              <div class="admin-stat-num"><?= (int)($stats['total_students'] ?? 0) ?></div>
-              <div class="admin-stat-sub">Registered student accounts</div>
-            </div>
-
-            <div class="admin-stat-card">
-              <div class="admin-stat-label">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
-                <span>Faculty</span>
-              </div>
-              <div class="admin-stat-num"><?= (int)($stats['total_faculty'] ?? 0) ?></div>
-              <div class="admin-stat-sub">Registered faculty accounts</div>
+              <div class="admin-stat-num"><?= (int)($stats['total_users'] ?? 0) ?></div>
+              <div class="admin-stat-sub">Registered user accounts</div>
             </div>
           </div>
         </section>
@@ -2701,6 +2696,27 @@ HTML PART starts here
 
             <div class="admin-toolbar">
               <input type="search" id="admin-posts-search" class="admin-search-input" placeholder="Search by title, group, or author..." aria-label="Search recent discussions">
+              <select id="admin-posts-group-filter" class="admin-filter-select" aria-label="Filter discussions by group">
+                <option value="all">All Groups</option>
+                <?php foreach ($adminGroups as $ag): ?>
+                  <option value="<?= (int)$ag['id'] ?>"><?= e($ag['name']) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <select id="admin-posts-activity-filter" class="admin-filter-select" aria-label="Filter discussions by replies">
+                <option value="all">All Activity</option>
+                <option value="has_replies">With Replies</option>
+                <option value="no_replies">No Replies (0)</option>
+              </select>
+              <select id="admin-posts-sort-filter" class="admin-filter-select" aria-label="Sort discussions">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="most_replies">Most Discussed</option>
+                <option value="fewest_replies">Fewest Replies</option>
+              </select>
+              <button type="button" id="admin-posts-reset-filters" class="btn-admin-action" style="display: none; padding: 0 10px; height: 34px; font-size: 12px; color: var(--text-dim);" title="Reset filters">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <span>Reset</span>
+              </button>
             </div>
           </div>
 
@@ -2719,7 +2735,13 @@ HTML PART starts here
                 </thead>
                 <tbody>
                   <?php foreach ($adminRecentPosts as $rp): ?>
-                    <tr>
+                    <tr data-post-id="<?= (int)$rp['id'] ?>"
+                        data-group-id="<?= (int)$rp['group_id'] ?>"
+                        data-group-name="<?= e(strtolower($rp['group_name'])) ?>"
+                        data-author="<?= e(strtolower($rp['author_name'] . ' ' . $rp['author_username'])) ?>"
+                        data-title="<?= e(strtolower($rp['title'])) ?>"
+                        data-replies="<?= (int)$rp['reply_count'] ?>"
+                        data-timestamp="<?= strtotime($rp['created_at']) ?>">
                       <td style="max-width: 320px;">
                         <a href="index.php?group=<?= (int)$rp['group_id'] ?>&post=<?= (int)$rp['id'] ?>#post-<?= (int)$rp['id'] ?>" style="font-weight: 600; color: var(--text-main); text-decoration: none;">
                           <?= e($rp['title']) ?>
@@ -2747,8 +2769,24 @@ HTML PART starts here
                       </td>
                     </tr>
                   <?php endforeach; ?>
+                  <tr id="admin-posts-no-results" style="display: none;">
+                    <td colspan="6" style="text-align: center; padding: 32px 16px; color: var(--text-dim); font-size: 13px;">
+                      No discussions match the selected filters.
+                    </td>
+                  </tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Content Moderation Google-style Pagination -->
+            <div class="admin-pagination-container" id="admin-posts-pagination">
+              <div class="admin-pagination-info" id="admin-posts-pagination-info">
+                <span>Showing <strong id="admin-posts-showing-start">1</strong>–<strong id="admin-posts-showing-end"><?= min(15, count($adminRecentPosts ?? [])) ?></strong> of <strong id="admin-posts-total-count"><?= count($adminRecentPosts ?? []) ?></strong> discussions</span>
+                <span id="admin-posts-page-indicator" style="color: var(--text-dim); font-size: 12px; margin-left: 6px;">(Page <span id="admin-posts-current-page">1</span> of <span id="admin-posts-total-pages"><?= max(1, (int)ceil(count($adminRecentPosts ?? []) / 15)) ?></span>)</span>
+              </div>
+              <div class="admin-pagination-controls" id="admin-posts-pagination-controls" aria-label="Pagination Navigation">
+                <!-- Dynamically populated Google-style page buttons -->
+              </div>
             </div>
           <?php else: ?>
             <div class="admin-empty-state">No posts available for moderation.</div>
@@ -2854,13 +2892,13 @@ HTML PART starts here
                   </p>
 
                   <div class="group-card-meta">
-
-                    <span style="cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" onclick="event.preventDefault(); event.stopPropagation(); openGroupMembersModal(<?= (int)$g['id'] ?>, '<?= e(addslashes($g['name'])) ?>')" title="View members"><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
-
+                    <?php if (is_admin()): ?>
+                      <span style="cursor: pointer; text-decoration: underline; text-underline-offset: 2px;" onclick="event.preventDefault(); event.stopPropagation(); openGroupMembersModal(<?= (int)$g['id'] ?>, '<?= e(addslashes($g['name'])) ?>')" title="View and moderate members"><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
+                    <?php else: ?>
+                      <span><strong><?= (int)$g['member_count'] ?></strong> <?= (int)$g['member_count'] === 1 ? 'Member' : 'Members' ?></span>
+                    <?php endif; ?>
                     <span>·</span>
-
                     <span><strong><?= (int)$g['post_count'] ?></strong> <?= (int)$g['post_count'] === 1 ? 'Discussion' : 'Discussions' ?></span>
-
                   </div>
 
                 </div>
@@ -3227,11 +3265,15 @@ HTML PART starts here
 
                 <div class="group-meta-stats" style="margin-top: 6px;">
 
-                  <button type="button" class="group-meta-item group-meta-members-btn" onclick="openGroupMembersModal(<?= $selected_group_id ?>, '<?= e(addslashes($currentGroup['name'])) ?>')" title="<?= is_admin() ? 'Click to view & manage members (Remove / Ban)' : 'Click to view members' ?>" style="background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;">
-
-                    <span class="group-meta-num" id="group-header-member-count" style="text-decoration: underline; text-underline-offset: 3px;"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
-
-                  </button>
+                  <?php if (is_admin()): ?>
+                    <button type="button" class="group-meta-item group-meta-members-btn" onclick="openGroupMembersModal(<?= $selected_group_id ?>, '<?= e(addslashes($currentGroup['name'])) ?>')" title="Click to view & manage members (Remove / Ban)" style="background: none; border: none; padding: 0; color: inherit; font: inherit; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-decoration: underline; text-underline-offset: 3px;">
+                      <span class="group-meta-num" id="group-header-member-count"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
+                    </button>
+                  <?php else: ?>
+                    <span class="group-meta-item">
+                      <span class="group-meta-num" id="group-header-member-count"><?= (int)$currentGroup['member_count'] ?></span> <?= (int)$currentGroup['member_count'] === 1 ? 'member' : 'members' ?>
+                    </span>
+                  <?php endif; ?>
 
                   <span>·</span>
 
@@ -3423,7 +3465,7 @@ HTML PART starts here
                       <div style="display: flex; align-items: center; gap: 10px;">
                         <img src="<?= e($req['avatar'] ?: 'assets/images/default-avatar.png') ?>" style="width: 34px; height: 34px; border-radius: 50%; object-fit: cover;">
                         <div>
-                          <div style="font-size: 13.5px; font-weight: 600; color: var(--text-main);"><?= e($req['name']) ?> <span style="font-size: 11px; color: var(--text-muted);">(<?= e($req['role']) ?>)</span></div>
+                          <div style="font-size: 13.5px; font-weight: 600; color: var(--text-main);"><?= e($req['name']) ?> <span style="font-size: 11px; color: var(--text-muted);">(<?= e($req['role'] === 'student' ? 'user' : $req['role']) ?>)</span></div>
                           <div style="font-size: 11.5px; color: var(--text-muted);"><?= e($req['email']) ?> · Requested <?= date('M j, Y g:i a', strtotime($req['created_at'])) ?></div>
                         </div>
                       </div>
@@ -5097,6 +5139,7 @@ HTML PART starts here
 
 
 
+<?php if (is_admin()): ?>
 <!-- GROUP MEMBERS MODAL (Admin: View, Remove & Ban Members) -->
 <div class="modal-overlay" id="group-members-modal" onclick="if(event.target===this) closeGroupMembersModal()">
   <div class="modal-dialog group-members-dialog" style="max-width: 560px; width: 100%; max-height: 85vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; border-radius: 16px;">
@@ -5113,7 +5156,7 @@ HTML PART starts here
           <span id="group-members-header-text">Community Members</span>
         </h3>
         <p style="margin: 3px 0 0; font-size: 12.5px; color: var(--text-dim);" id="group-members-subtitle">
-          View members<?php if (is_admin()): ?> &middot; Admin Management (Remove / Ban)<?php endif; ?>
+          View members &middot; Admin Management (Remove / Ban)
         </p>
       </div>
       <button type="button" class="btn-close-modal" onclick="closeGroupMembersModal()" aria-label="Close" style="background: none; border: none; font-size: 18px; color: var(--text-dim); cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
@@ -5124,11 +5167,9 @@ HTML PART starts here
       <button type="button" id="tab-active-members" class="gm-tab-btn active" onclick="switchGroupMembersTab('active')">
         Active Members (<span id="count-active-members">0</span>)
       </button>
-      <?php if (is_admin()): ?>
       <button type="button" id="tab-banned-members" class="gm-tab-btn" onclick="switchGroupMembersTab('banned')">
         Banned (<span id="count-banned-members">0</span>)
       </button>
-      <?php endif; ?>
     </div>
 
     <!-- Search Input -->
@@ -5161,6 +5202,7 @@ HTML PART starts here
     </div>
   </div>
 </div>
+<?php endif; ?>
 
 <!-- FULL IMAGE LIGHTBOX PREVIEW -->
 
