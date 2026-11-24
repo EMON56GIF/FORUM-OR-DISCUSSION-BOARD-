@@ -1,4 +1,14 @@
 <?php
+/* ==========================================================================
+   QUADDIT PLATFORM - USER REGISTRATION CONTROLLER
+   File: register.php
+   Purpose: Handles new user registration, validation, password hashing,
+            account role generation, and the registration UI template.
+   ========================================================================== */
+
+// ==========================================================================
+// 1. REGISTRATION ROUTING & ROLE CONFIGURATION
+// ==========================================================================
 require_once __DIR__ . '/db.php';
 
 if (is_logged_in()) {
@@ -19,6 +29,9 @@ if (!in_array($requestedRole, ['student', 'faculty', 'admin'])) {
 $error = '';
 $success = '';
 
+// ==========================================================================
+// 2. REGISTRATION CONTROLLER & INPUT VALIDATION (POST)
+// ==========================================================================
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     $role       = strtolower(trim($_POST['reg_role'] ?? 'student'));
     if (!in_array($role, ['student', 'faculty', 'admin'])) {
@@ -94,20 +107,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
             $defaultAvatar = 'assets/images/avatar_default.svg';
 
-            // Insert into the designated table
-            if ($role === 'student') {
-                $stmt = $conn->prepare("INSERT INTO students (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
-                $stmt->execute();
-            } elseif ($role === 'faculty' && table_exists('faculty', $conn)) {
-                $stmt = $conn->prepare("INSERT INTO faculty (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
-                $stmt->execute();
-            } elseif ($role === 'admin') {
-                $stmt = $conn->prepare("INSERT INTO admins (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-                $stmt->bind_param("sssss", $account_id, $name, $email, $hashedPassword, $defaultAvatar);
-                $stmt->execute();
+            // Insert into the designated role table
+            $targetTable = ($role === 'admin') ? 'admins' : (($role === 'faculty') ? 'faculty' : 'students');
+            if ($role !== 'faculty' || table_exists('faculty', $conn)) {
+                $conn->execute_query(
+                    "INSERT INTO $targetTable (id, name, email, password, avatar, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
+                    [$account_id, $name, $email, $hashedPassword, $defaultAvatar]
+                );
+            }
 
+            if ($role === 'admin') {
                 // Mark as registered in authorized_admins if present
                 $conn->execute_query("UPDATE authorized_admins SET is_registered = 1 WHERE admin_id = ?", [$account_id]);
             }
@@ -133,6 +142,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 ?>
+<!-- ==========================================================================
+     3. REGISTRATION INTERFACE & INPUT FORM CARD
+     ========================================================================== -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -290,6 +302,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     </div>
   </div>
 
+  <!-- ==========================================================================
+       4. CLIENT-SIDE VALIDATION & UI SCRIPTS
+       ========================================================================== -->
   <script>
     function updateAuthThemeUI(theme) {
       document.documentElement.setAttribute('data-theme', theme);

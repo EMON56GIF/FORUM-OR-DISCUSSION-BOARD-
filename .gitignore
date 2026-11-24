@@ -1,5 +1,7 @@
-# Ignore a specific folder and everything inside it:
+# Images folder
+images/
+assets/images/
 
-
-# Or a nested folder:
-assets/images
+# Local agent skills and configs
+.agent/
+.agents/

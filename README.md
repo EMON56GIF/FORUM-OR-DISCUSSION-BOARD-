@@ -1,260 +1,318 @@
-# Quaddit — Modern Discussion Forum & Community Board
+# Quaddit — College Discussion Board & Community Forum
 
-<div align="center">
-
-<img src="./assets/images/logo-dark-theme.png" alt="Quaddit Logo" width="180"/>
-
-<br/>
-
-[![PHP](https://img.shields.io/badge/PHP-8.2+-777BB4?style=for-the-badge&logo=php&logoColor=white)](https://www.php.net/)
-[![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
-[![Apache](https://img.shields.io/badge/Apache-2.4-D22128?style=for-the-badge&logo=apache&logoColor=white)](https://httpd.apache.org/)
-[![JavaScript](https://img.shields.io/badge/Vanilla_JS-ES6+-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/)
-[![CSS3](https://img.shields.io/badge/CSS3-Modern_Flex%2FGrid-1572B6?style=for-the-badge&logo=css3&logoColor=white)](https://developer.mozilla.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-
-<p align="center">
-  A lightweight, high-performance community forum and discussion board built with <strong>pure PHP</strong> and <strong>MySQL</strong>. Featuring group-based discussion hubs, a real-time WYSIWYG rich text composer, multi-image uploads, recursive nested replies, fine-grained role-based access control (RBAC), and a responsive Twitter/X-style interface with native dark/light themes.
-</p>
-
-[Explore Features](#-key-features) • [System Architecture](#-system-architecture) • [Database Schema](#-database-design--schema) • [Installation Guide](#-installation--getting-started) • [Security](#-security--validation)
-
-</div>
+**Quaddit** is a full-stack web forum and academic community platform built with **PHP**, **MySQL (MySQLi)**, **HTML5**, **CSS3**, and **Vanilla JavaScript**. It enables students, educators, and administrators to organize subject-specific discussion groups, publish rich-text threads with image attachments, collaborate through nested replies, manage group memberships and bans, and broadcast administrative announcements.
 
 ---
 
-## 📸 Project Preview
+## Table of Contents
 
-<div align="center">
-
-|                                                                    Central Discussion Feed & Quick Composer                                                                     |                                                                             Group Communities Hub                                                                              |
-| :-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| <img src="./assets/images/logo-dark-theme.png" alt="Home Feed Preview" width="380"/><br/>_Real-time WYSIWYG composer, multi-image attachment previews, and chronological feeds_ | <img src="./assets/images/logo-light-theme.png" alt="Groups Hub Preview" width="380"/><br/>_Subject and topic-based group catalog with one-click join/leave and member gating_ |
-
-|                               Administrative Control Panel                               |                            User Profile & Activity Manager                             |
-| :--------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------: |
-| _Platform analytics, group lifecycle controls (active/restricted), and moderation tools_ | _Custom 3:1 banner, profile avatar, biography, and tabbed post/reply activity history_ |
-
-</div>
-
----
-
-## ⚡ Key Highlights
-
-- **Dependency-Free Architecture**: Zero bloated frontend libraries or heavy backend frameworks. Pure PHP 8.2+ and Vanilla JavaScript for maximum speed, transparency, and minimal server footprint.
-- **Role-Based Access Control (RBAC)**: Strict segregation between **Members** and **Administrators** with protected authentication gateways.
-- **Group Communities**: Create topic-specific channels (e.g., _Full Stack Development_, _Software Architecture_, _Cloud Engineering_) where posting is gated to joined members.
-- **Interactive Rich Composer**: In-place visual text styling (Bold, Italic, Strikethrough, Headings) with real-time active button states and safe Markdown fallback.
-- **Multi-Image Attachments**: Upload up to 4 images per discussion with instant client-side preview thumbnails and one-click removal before publishing.
-- **Recursive Threaded Discussions**: Unlimited nested reply hierarchy with parent-child relationship tracking and inline reply authoring.
-- **Theme Flexibility**: Persistent Dark Mode and Light Mode switching with custom CSS design tokens.
+1. [Project Overview](#project-overview)
+2. [Website Preview](#website-preview)
+3. [Key Features](#key-features)
+4. [User Features](#user-features)
+5. [Admin Features](#admin-features)
+6. [Technology Stack](#technology-stack)
+7. [System Architecture](#system-architecture)
+8. [Application Workflow](#application-workflow)
+9. [Database Architecture](#database-architecture)
+10. [Entity Relationship Diagram](#entity-relationship-diagram)
+11. [Database Keys and Relationships](#database-keys-and-relationships)
+12. [Project Folder Structure](#project-folder-structure)
+13. [Installation and Setup](#installation-and-setup)
+14. [Database Configuration](#database-configuration)
+15. [How to Run the Project](#how-to-run-the-project)
+16. [Security Considerations](#security-considerations)
+17. [Future Improvements](#future-improvements)
+18. [Contributors](#contributors)
 
 ---
 
-## 🎯 Key Features by User Role
+## Project Overview
 
-### 👥 For Public Visitors & Members
+Quaddit uses a three-column desktop forum layout (navigation sidebar, central feed/thread workspace, and contextual right sidebar) paired with a sticky mobile top bar, bottom navigation bar, and slide-out drawer.
 
-- **Seamless Onboarding**: Simple account registration with validation and encrypted credential storage.
-- **Role-Isolated Login**: Clean authentication portal directing users according to account credentials.
-- **Community Discovery**: Browse public groups, discover trending discussions, and view member counts.
-- **Group Membership**: One-click Join/Leave actions gating discussion creation to verified group participants.
-- **Rich Discussion Creation**:
-  - WYSIWYG formatting toolbar with instant visual feedback (no raw Markdown tags inserted).
-  - Multiple image attachments with client-side preview and individual deletion controls.
-  - Post view counter automatically tracking discussion engagement.
-- **Nested Conversation Threads**:
-  - Reply directly to main discussions or reply recursively to existing replies.
-  - Inline reply creator within feeds and dedicated thread view pages.
-  - Most recent replies surfaced dynamically.
-- **Content Ownership**: Authors retain full permissions to edit or permanently delete their own posts and replies.
-- **Profile Customization**:
-  - Custom display name and biographical summary.
-  - Avatar image and custom header banner (3:1 aspect ratio).
-  - Tabbed activity view: **Posts Published** vs. **Replies Authored**.
+Key architectural characteristics observed directly in the codebase:
 
-### 🛡️ For Administrators
+- **Zero external frameworks**: Pure procedural/modular PHP (`db.php`, `index.php`, `profile.php`, `login.php`, `register.php`) and dependency-free ES6+ JavaScript (`assets/js/main.js`).
+- **Role-separated account tables bridged to a unified relational user table**: Registration and login store credentials in `students` or `admins`, while `login_user_session()` synchronizes the active account into `users` so posts, replies, memberships, bans, and announcements share clean foreign-key relationships.
+- **Database-backed media**: Uploaded avatars, profile banners, group icons, post images, and reply images are converted server-side to Base64 data URIs and stored in `LONGTEXT` columns.
 
-- **Administrative Portal**: Secure, separate onboarding portal verified via administrative authorization key (`QUAD-ADMIN-2026`).
-- **Real-Time Analytics Dashboard**: Overview metrics displaying Total Groups, Active Groups, Total Discussions, and Registered Accounts.
+---
+
+## Website Preview
+
+All screenshots below were captured directly from the live local Quaddit instance (`http://127.0.0.1/FORUM-OR-DISCUSSION-BOARD/`).
+
+> **Note:** Authenticated-only views (such as the Admin Console) are not pictured because unauthenticated access is blocked by server-side session and role checks (`is_admin()`).
+
+|                                       Homepage Feed                                       |                                Community Groups Directory                                |
+| :---------------------------------------------------------------------------------------: | :--------------------------------------------------------------------------------------: |
+|                  ![Quaddit Homepage](./assets/screenshots/homepage.png)                   |               ![Quaddit Groups Directory](./assets/screenshots/groups.png)               |
+| _Three-column layout with search bar, discussion feed, community widget, and dark theme._ | _Public, Private, and Restricted group cards with live search and join/request actions._ |
+
+|                             Individual Group Discussion Page                             |                               Discussion Post & Reply Interface                               |
+| :--------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------: |
+|       ![Quaddit Group Discussion Page](./assets/screenshots/group-discussion.png)        |         ![Quaddit Post and Reply Interface](./assets/screenshots/post-interface.png)          |
+| _Group header, pinned posts, membership gating prompt, and group announcements sidebar._ | _Expanded discussion thread showing formatted inline code, view counter, and nested replies._ |
+
+|                                    User Profile Page                                    |                                  Authentication Portal                                  |
+| :-------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------: |
+|             ![Quaddit User Profile](./assets/screenshots/user-profile.png)              |            ![Quaddit Login Portal](./assets/screenshots/authentication.png)             |
+| _Profile banner, avatar, bio, join date, and tabbed Posts / Replies / Community views._ | _Role-aware sign-in portal with Student and Admin tabs and password visibility toggle._ |
+
+---
+
+## Key Features
+
+- **Topic-Based Communities**: Public, Private (approval-gated), and Restricted (read-only) discussion groups.
+- **Rich-Text Editor & Markdown/HTML Rendering**: Visual `contenteditable` formatting toolbar (`Bold`, `Italic`, `Underline`, `Strikethrough`, `Heading`, `Bullet List`, `Link`) synced with hidden form fields and sanitized server-side in `db.php`.
+- **Multi-Image Post & Reply Uploads**: Attach multiple images per discussion post (`post_images`) and single images on replies (`replies.image_url`) with client-side previews.
+- **Recursive Nested Replies**: Hierarchical reply threads via self-referencing `replies.parent_id` with inline reply forms.
+- **Group Moderation & Ban Enforcement**: Per-group bans (`group_bans`), member removal, and private group join request queues (`group_requests`).
+- **Admin Announcements**: Admin-published announcements per group (`group_notices`) with dedicated reading view and admin search filter.
+- **Dark & Light Theme Support**: CSS custom property themes persisted via `localStorage` (`campus_theme`).
+- **Responsive Mobile Layout**: Dedicated mobile top header, quick-post FAB, bottom navigation bar, search drawer, and slide-out profile drawer (`includes/mobile-nav.php`).
+
+---
+
+## User Features
+
+### Public Visitors (Unauthenticated)
+
+- Browse public discussions on the home feed (`index.php`), search discussions by keyword (`?q=`), and view Recent Discussions.
+- Browse the Community directory (`index.php?view=groups`) and read threads inside **Public** and **Restricted** groups.
+- View user profiles (`profile.php?id=<user_id>`), including authored posts and replies in public groups.
+- **Gating**: Unauthenticated visitors cannot create posts, write replies, join groups, or view **Private** group discussions; attempting protected actions redirects to `register.php`.
+
+### Registered Users (Members)
+
+- **Registration & Login** (`register.php`, `login.php`, `logout.php`):
+  - Register with full name, email, and password (validated for uniqueness across role tables; auto-generates a unique 10-digit ID).
+  - Sign in via email or 10-digit ID with optional `Remember me` cookie (`campus_remember`).
+- **Group Membership** (`index.php`):
+  - **Join** public groups directly (blocked if the user is banned in `group_bans`).
+  - **Request to Join** private groups (`group_requests`) and **Cancel** pending requests before admin review.
+  - **Leave** joined groups at any time (unless the user is the group's founding creator).
+- **Creating & Managing Discussions**:
+  - Publish posts inside joined, non-restricted groups using the rich-text composer and attach images (`upload_post_images()`).
+  - Edit post title, body, group, and attached images (including removing existing images), or delete owned posts.
+- **Threaded & Nested Replies**:
+  - Post top-level replies or nested child replies (`parent_id`) inside joined, non-restricted groups, with optional image attachment.
+  - Edit or delete owned replies.
+- **Profile Management** (`profile.php`):
+  - Update display name, bio (up to 255 characters), avatar, and 3:1 header banner (`action=update_profile`).
+  - Browse **Posts**, **Replies**, and **Community** tabs on own or other users' profiles (private group content is filtered out when viewing another user's profile unless the viewer is an admin or member of that private group).
+
+---
+
+## Admin Features
+
+Admin privileges are verified server-side via `is_admin()` (`$_SESSION['account_type'] === 'admin'` or `$_SESSION['user_role'] === 'admin'`).
+
+- **Admin Registration & Access** (`admin_register.php` -> `register.php?role=admin`, `login.php?role=admin`):
+  - Requires either the institutional authorization key or matching verification in `authorized_admins`.
+  - Unlocks the **Admin Console** (`index.php?view=admin`) and the admin-only **Announcements** navigation view (`index.php?view=announcements`).
+- **Admin Overview Dashboard**:
+  - Live aggregate metrics for **Total Groups**, **Active Groups**, **Discussions**, and **Users**.
 - **Group Lifecycle Management**:
-  - Create new community discussion groups with custom titles and descriptions.
-  - Set group status: **Active** (open to posting) or **Restricted** (read-only archive mode).
-  - Modify group metadata or permanently remove obsolete groups.
-- **Global Content Moderation**:
-  - Authority to delete policy-violating discussions and replies across any group.
-  - Creator safeguards preventing the founding administrator from abandoning created groups.
-- **User Account Governance**: Roster management with capabilities to restrict or unban users.
+  - **Create** new groups with name, description, status (`public` / `private` / `restricted`), and icon image (`create_group`).
+  - **Edit** group metadata and icon (`edit_group`).
+  - **Toggle Status** between `public`, `private` (requires approval), and `restricted` (pauses new posts/replies) (`toggle_group_status`).
+  - **Delete** groups along with cascading posts, replies, memberships, and notices (`delete_group`).
+- **Membership Requests & User Moderation**:
+  - **Approve / Reject** pending join requests for private groups (`approve_group_request`, `reject_group_request`), automatically cleaning up stale requests if a user is already a member (`has_group_request()`).
+  - **Inspect Group Members & Banned Users** via JSON endpoint (`action=get_group_members`).
+  - **Remove, Ban, and Unban** members within a group (`remove_group_member`, `ban_group_member`, `unban_group_member` using `group_bans`).
+- **Content Moderation & Pinning**:
+  - Searchable, filterable (by group, reply activity, and sort order), 15-per-page paginated **Content Moderation** table in the Admin Console.
+  - **Pin / Unpin** important posts inside groups (`toggle_pin_post`).
+  - **Delete** any post or reply across any group (`delete_post`, `delete_reply`).
+- **Announcements Management**:
+  - Create and delete formatted group/campus announcements (`create_group_notice`, `delete_group_notice`).
+  - Dedicated **Announcements** view in the sidebar/mobile drawer (visible exclusively to admins) with a live search filter by title, message, or group.
 
 ---
 
-## 🛠️ Technology Stackkk
+## Technology Stack
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                            TECHNOLOGY STACK                            │
-├───────────────────┬────────────────────────────────────────────────────┤
-│ Presentation Tier │ HTML5 Semantic Elements                            │
-│                   │ CSS3 (Custom Variables, Flexbox, CSS Grid)         │
-│                   │ Vanilla JavaScript (ES6+, DOM Manipulation, AJAX)  │
-├───────────────────┼────────────────────────────────────────────────────┤
-│ Application Tier  │ PHP 8.2+ (Procedural / Modular Architecture)       │
-│                   │ Native Session Handler (PHP Sessions)              │
-│                   │ Apache HTTP Server 2.4+                            │
-├───────────────────┼────────────────────────────────────────────────────┤
-│ Database Tier     │ MySQL 8.0+ / MariaDB (InnoDB Engine)               │
-│                   │ PHP MySQLi Extension (Prepared Statements)         │
-│                   │ phpMyAdmin (Database Management & Inspection)      │
-├───────────────────┼────────────────────────────────────────────────────┤
-│ Dev Environment   │ XAMPP v3.3.0+ Localhost Stack                      │
-└───────────────────┴────────────────────────────────────────────────────┘
-```
+| Layer                | Technology                              | Usage in Project                                                                                                          |
+| -------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Markup**           | HTML5                                   | Semantic templates in `index.php`, `profile.php`, `login.php`, `register.php`, `includes/mobile-nav.php`                  |
+| **Styling**          | CSS3 (Grid, Flexbox, Custom Properties) | Responsive 3-column layout, mobile drawer, dark/light theme tokens (`assets/css/style.css`, `assets/css/auth.css`)        |
+| **Client Scripting** | Vanilla JavaScript (ES6+)               | `contenteditable` WYSIWYG toolbar, modals, image preview strips, client-side filtering & pagination (`assets/js/main.js`) |
+| **Server Runtime**   | PHP 8.2+                                | Request routing, form/file handling, session management, HTML sanitization, Markdown/rich-text rendering                  |
+| **Database**         | MySQL / MariaDB (InnoDB, `utf8mb4`)     | Relational storage for accounts, groups, memberships, requests, bans, notices, posts, images, and replies                 |
+| **Database Driver**  | PHP `mysqli`                            | Parameterized queries via `$conn->execute_query()` and `$conn->prepare()`                                                 |
+| **Web Server**       | Apache HTTP Server (XAMPP)              | Local PHP execution and static asset serving                                                                              |
+| **Version Control**  | Git & GitHub                            | Branch history, collaboration, and repository hosting                                                                     |
 
 ---
 
-## 🔄 Application Workflow
+## System Architecture
 
-The diagram below illustrates the complete operational lifecycle from guest onboarding to community engagement and moderation:
+```mermaid
+flowchart LR
+    subgraph Client["Presentation Tier (Browser)"]
+        UI["HTML5 + CSS3 Themes (Dark/Light)"]
+        JS["Vanilla JS (assets/js/main.js)<br/>WYSIWYG Toolbar, Modals, Filters"]
+        Nav["Mobile Drawer & Bottom Bar<br/>(includes/mobile-nav.php)"]
+    end
+
+    subgraph Server["Application Tier (Apache + PHP)"]
+        Router["Entry Controllers<br/>index.php | profile.php | thread.php | reply.php"]
+        Auth["Auth & Session Controllers<br/>login.php | register.php | logout.php"]
+        Core["Core Bootstrap & Helpers (db.php)<br/>Session, RBAC, e(), Sanitizer, Rich Renderer"]
+    end
+
+    subgraph Data["Data & Media Storage (MySQL / InnoDB)"]
+        DB[("Quaddit Database<br/>11 Relational Tables")]
+        Media["Base64 Media Columns (LONGTEXT)<br/>Avatars, Banners, Post/Reply Images"]
+    end
+
+    UI <--> JS
+    UI <--> Nav
+    Client -- "HTTP GET / POST / Multipart" --> Router
+    Client -- "Auth Forms" --> Auth
+    Router --> Core
+    Auth --> Core
+    Core -- "MySQLi Prepared Statements" --> DB
+    Core -- "MIME Check + Base64 Encode" --> Media
+```
+
+### Layer Responsibilities
+
+- **Presentation Tier**: Renders responsive HTML, toggles dark/light themes, manages the `contenteditable` formatting toolbar, builds client-side image previews, and handles admin table filtering/pagination without page reloads.
+- **Application Tier**: `db.php` initializes timezone (`Asia/Kolkata`), PHP sessions, MySQLi connection, escaping (`e()`), rich-text sanitization/rendering (`render_rich_formatted_text()`), and role helpers (`is_logged_in()`, `is_admin()`, `is_faculty()`, `is_student()`). `index.php` and `profile.php` handle POST/GET actions and template rendering; `thread.php` and `reply.php` resolve direct permalinks.
+- **Data & Storage Tier**: MySQL InnoDB tables enforce referential integrity with `ON DELETE CASCADE` and `ON DELETE SET NULL`. Uploaded images are validated via `finfo`/`mime_content_type` and stored as Base64 data URIs in `LONGTEXT` columns alongside static icons/logos under `assets/images/`.
+
+---
+
+## Application Workflow
 
 ```mermaid
 flowchart TD
-    Guest([Visitor / Unauthenticated]) --> AuthCheck{Registered?}
+    Start(["Visitor Opens Quaddit"]) --> Browse["Browse Public Feed, Groups & Profiles"]
+    Browse --> AuthQ{"Authenticated?"}
 
-    AuthCheck -- No --> RegChoice{Select Registration}
-    RegChoice -- Member --> RegUser[Member Registration<br/>Name, Username, Email, Password]
-    RegChoice -- Admin --> RegAdmin[Admin Registration<br/>Admin ID + Auth Key Verification]
+    AuthQ -- "No" --> RegOrLogin["login.php / register.php"]
+    RegOrLogin --> RolePick{"Account Role?"}
+    RolePick -- "Student / User" --> UserAuth["Verify Email/ID & Password<br/>Sync to users + Set $_SESSION"]
+    RolePick -- "Admin" --> AdminAuth["Verify Admin Key / Roster & Password<br/>Sync to users + Set $_SESSION"]
 
-    RegUser --> HashBcrypt[Bcrypt Password Hashing]
-    RegAdmin --> HashBcrypt
-    HashBcrypt --> SaveDB[(Store in MySQL)]
+    AuthQ -- "Yes" --> RoleCheck{"is_admin()?"}
+    UserAuth --> HomeFeed["Home Discussion Feed (index.php)"]
+    AdminAuth --> AdminConsole["Admin Console (index.php?view=admin)"]
+    RoleCheck -- "User" --> HomeFeed
+    RoleCheck -- "Admin" --> AdminConsole
 
-    AuthCheck -- Yes --> LoginGate[Login Portal]
-    SaveDB --> LoginGate
-    LoginGate --> VerifyHash{password_verify}
+    %% User Workflow
+    HomeFeed --> SelectGroup["Open Group (index.php?group=id)"]
+    SelectGroup --> PrivateCheck{"Group Status?"}
+    PrivateCheck -- "Private & Not Member" --> RequestJoin["Request Membership (group_requests)"]
+    PrivateCheck -- "Public" --> MemberCheck{"Is Group Member?"}
+    PrivateCheck -- "Restricted" --> ReadOnly["Read-Only View (Posting Disabled)"]
 
-    VerifyHash -- Invalid --> LoginErr[Display Auth Error]
-    LoginErr --> LoginGate
+    MemberCheck -- "No" --> BanCheck{"Banned in group_bans?"}
+    BanCheck -- "Yes" --> BlockedJoin["Join Blocked"]
+    BanCheck -- "No" --> JoinGroup["Join Group (group_members)"]
+    JoinGroup --> MemberCheck
 
-    VerifyHash -- Valid --> CreateSession[Initialize Authenticated Session]
-    CreateSession --> RoleRouter{User Role?}
+    MemberCheck -- "Yes" --> Compose["Create Post (+ Images) / Reply / Nested Reply"]
+    Compose --> Ownership["Edit or Delete Own Posts & Replies"]
+    HomeFeed --> ProfileEdit["Edit Own Profile (profile.php)<br/>Name, Bio, Avatar, Banner"]
 
     %% Admin Workflow
-    RoleRouter -- Admin --> AdminPanel[Admin Dashboard]
-    AdminPanel --> ModGroups[Create / Restrict / Delete Groups]
-    AdminPanel --> ModContent[Global Content Moderation]
-    AdminPanel --> ModUsers[User Account Governance]
-
-    %% Member Workflow
-    RoleRouter -- Member --> MainFeed[Home Discussion Feed]
-    MainFeed --> GroupExplorer[Discover & Join Groups]
-
-    GroupExplorer --> CheckJoined{Joined Group?}
-    CheckJoined -- No --> JoinPrompt[Prompt: Join to Publish]
-    CheckJoined -- Yes --> PostComposer[Create Post: WYSIWYG + Multi-Image]
-
-    MainFeed --> ViewThread[Open Discussion Thread]
-    ViewThread --> PostReply[Submit Threaded / Nested Reply]
-
-    MainFeed --> ManageOwn[Edit / Delete Owned Content]
-    MainFeed --> ProfileManager[Customize Avatar, Banner & Bio]
-
-    %% Sign Out
-    MainFeed --> SignOut[Logout]
-    AdminPanel --> SignOut
-    SignOut --> DestroySession[Destroy Session & Clear Cookies]
-    DestroySession --> Guest
+    AdminConsole --> ManageGroups["Create / Edit / Restrict / Activate / Toggle Public-Private / Delete Groups"]
+    AdminConsole --> ApproveQueue["Approve or Reject Private Group Requests"]
+    AdminConsole --> MemberMod["View Members: Remove, Ban, or Unban (group_bans)"]
+    AdminConsole --> ContentMod["Filter, Paginate, Pin, or Delete Any Post / Reply"]
+    AdminConsole --> Notices["Create / Delete / Search Group & Campus Announcements (group_notices)"]
 ```
 
 ---
 
-## 🏛️ System Architecture
+## Database Architecture
 
-Quaddit implements a classic **3-Tier Client-Server Architecture** ensuring clean separation of concerns:
+### Database Connection & Communication
 
+```mermaid
+flowchart LR
+    Browser["Web Browser"] -- "HTTP Request / Form Submit" --> Front["HTML/JS Form & DOM"]
+    Front -- "POST / GET Payload" --> PHP["PHP Controller (index.php / login.php / profile.php)"]
+    PHP -- "require_once 'db.php'" --> DBConn["db.php<br/>mysqli('127.0.0.1', 'root', '', 'Quaddit')<br/>utf8mb4 + Asia/Kolkata (+05:30)"]
+    DBConn -- "$conn->execute_query($sql, $params)<br/>or $conn->prepare()" --> MySQL[("MySQL / MariaDB<br/>InnoDB Engine")]
+    MySQL -- "Result Set / Affected Rows" --> PHP
+    PHP -- "Escaped HTML (e()) / JSON" --> Browser
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   1. PRESENTATION TIER (Client Side)                   │
-│               HTML5  •  CSS3  •  Vanilla JavaScript (ES6+)             │
-│   - Responsive Feed & Mobile Drawer Layout                             │
-│   - Visual WYSIWYG Formatter & Active State Tracker                    │
-│   - Client-side Image Previews & Dynamic Attachment Controls           │
-│   - Native Light/Dark Theme Controller                                 │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTP / HTTPS Requests
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                   2. APPLICATION TIER (Server Side)                    │
-│                  PHP 8.2+  •  Apache 2.4 Web Server                    │
-│   - Router & Request Dispatcher (index.php, profile.php, etc.)        │
-│   - Session Governance & Role-Based Access Control (RBAC)              │
-│   - XSS Filtering & Input Sanitization Engine                          │
-│   - Media Processing, Multipart Upload Handling & MIME Validation      │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ MySQLi Parameterized Statements
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                     3. DATA TIER (Storage Layer)                       │
-│                        MySQL 8.0+ (InnoDB)                             │
-│   - Relational Tables (users, groups, posts, post_images, replies)     │
-│   - Foreign Key Constraints & Cascading Deletions (ON DELETE CASCADE)  │
-│   - UTF8mb4 Character Encoding for Universal Emoji & Symbol Support    │
-└────────────────────────────────────────────────────────────────────────┘
-```
+
+- **Connection Entry (`db.php`)**: Establishes a single `$conn` MySQLi instance with `utf8mb4` charset and `+05:30` session time zone, and ensures `group_notices` exists on startup.
+- **Query Execution**: Dynamic queries pass parameters safely through `$conn->execute_query($sql, $params)` (PHP 8.2+) or `$conn->prepare()` + `bind_param()`, separating SQL structure from user input.
+- **Authentication Bridge**: Account registration inserts into `students` or `admins` using a unique 10-digit ID (`id`) and email (`password_hash(..., PASSWORD_BCRYPT)`). On login, `login_user_session()` ensures a corresponding row exists in `users` (`uid` = 10-digit account ID) and stores `user_id`, `account_id`, `account_type`, and `user_role` in `$_SESSION`.
+- **Content & Media Persistence**: Posts (`posts`), multi-image attachments (`post_images`), nested replies (`replies`), memberships (`group_members`), requests (`group_requests`), bans (`group_bans`), and notices (`group_notices`) all reference `users.id` and `groups.id`. Uploaded images are read via `file_get_contents()` and stored as Base64 data URIs in `LONGTEXT` columns.
+
+### Database Tables
+
+The live `Quaddit` database contains **11 InnoDB tables** (10 defined in `schema.sql` plus `group_notices` also ensured by `db.php`, and `group_bans` used for per-group user bans):
+
+| Table                | Purpose                                                   | Key Columns                                                                                                                                       | PK   | Foreign Keys                                                                                     | Unique / Indexes                                         |
+| -------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| **`students`**       | Student/user login credentials and profile defaults       | `id` (`varchar(10)`), `name`, `email`, `password`, `avatar`, `banner_url`, `bio`, `created_at`                                                    | `id` | —                                                                                                | `UNIQUE(email)`                                          |
+| **`admins`**         | Administrator login credentials and profile defaults      | `id` (`varchar(10)`), `name`, `email`, `password`, `avatar`, `banner_url`, `bio`, `created_at`                                                    | `id` | —                                                                                                | `UNIQUE(email)`                                          |
+| **`users`**          | Unified relational identity bridge for all forum entities | `id` (`int`), `uid` (`varchar(10)`), `name`, `username`, `email`, `password`, `role`, `account_type`, `avatar`, `banner_url`, `bio`, `created_at` | `id` | —                                                                                                | `UNIQUE(uid)`, `UNIQUE(email)`, `INDEX(role)`            |
+| **`groups`**         | Topic/subject discussion hubs                             | `id`, `name`, `description`, `image_url`, `status` (`public`/`private`/`restricted`/`active`), `created_by`, `created_at`                         | `id` | `created_by -> users(id)` (`ON DELETE SET NULL`)                                                 | `INDEX(status)`, `INDEX(created_by)`                     |
+| **`group_members`**  | Tracks active members in each group                       | `id`, `group_id`, `user_id`, `joined_at`                                                                                                          | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE`)                           | `UNIQUE(group_id, user_id)`                              |
+| **`group_requests`** | Pending join requests for private groups                  | `id`, `group_id`, `user_id`, `created_at`                                                                                                         | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE`)                           | `UNIQUE(group_id, user_id)`                              |
+| **`group_bans`**     | Per-group ban records enforced on join and posting        | `id`, `group_id`, `user_id`, `banned_by`, `created_at`                                                                                            | `id` | Logical links to `groups(id)` & `users(id)`                                                      | `UNIQUE(group_id, user_id)`                              |
+| **`group_notices`**  | Admin announcements scoped to groups                      | `id`, `group_id`, `user_id`, `headline`, `message`, `created_at`                                                                                  | `id` | `group_id -> groups(id)`, `user_id -> users(id)` (`ON DELETE CASCADE` in `schema.sql`)           | `INDEX(group_id)`                                        |
+| **`posts`**          | Discussion threads published in groups                    | `id`, `user_id`, `group_id`, `title`, `content`, `views`, `is_pinned`, `created_at`, `updated_at`                                                 | `id` | `user_id -> users(id)`, `group_id -> groups(id)` (`ON DELETE CASCADE`)                           | `INDEX(user_id)`, `INDEX(group_id)`, `INDEX(created_at)` |
+| **`post_images`**    | Multiple image attachments per post                       | `id`, `post_id`, `image_url`, `created_at`                                                                                                        | `id` | `post_id -> posts(id)` (`ON DELETE CASCADE`)                                                     | `INDEX(post_id)`                                         |
+| **`replies`**        | Top-level and nested replies on posts                     | `id`, `post_id`, `user_id`, `parent_id`, `content`, `image_url`, `created_at`, `updated_at`                                                       | `id` | `post_id -> posts(id)`, `user_id -> users(id)`, `parent_id -> replies(id)` (`ON DELETE CASCADE`) | `INDEX(post_id)`, `INDEX(user_id)`, `INDEX(parent_id)`   |
 
 ---
 
-## 🗄️ Database Design & Schema
-
-The relational database (`quaddit`) is structured into specialized InnoDB tables enforcing referential integrity with cascading updates and deletions:
+## Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-    ADMINS ||--o{ GROUPS : manages
-    ADMINS {
-        varchar_10 id PK
-        varchar_100 name
-        varchar_100 email UK
-        varchar_255 password
-        longtext avatar
-        longtext banner_url
-        varchar_255 bio
-        datetime created_at
-    }
-
     STUDENTS {
-        varchar_10 id PK
-        varchar_100 name
-        varchar_100 email UK
-        varchar_255 password
+        varchar id PK
+        varchar name
+        varchar email UK
+        varchar password
         longtext avatar
         longtext banner_url
-        varchar_255 bio
+        varchar bio
         datetime created_at
     }
 
-    USERS ||--o{ GROUPS : creates
-    USERS ||--o{ GROUP_MEMBERS : joins
-    USERS ||--o{ POSTS : authors
-    USERS ||--o{ REPLIES : writes
+    ADMINS {
+        varchar id PK
+        varchar name
+        varchar email UK
+        varchar password
+        longtext avatar
+        longtext banner_url
+        varchar bio
+        datetime created_at
+    }
+
     USERS {
         int id PK
-        varchar_10 uid UK
-        varchar_100 name
-        varchar_100 username
-        varchar_100 email UK
-        varchar_255 password
+        varchar uid UK
+        varchar name
+        varchar username
+        varchar email UK
         enum role
+        enum account_type
         longtext avatar
         longtext banner_url
-        varchar_255 bio
+        varchar bio
         datetime created_at
     }
 
-    GROUPS ||--o{ GROUP_MEMBERS : contains
-    GROUPS ||--o{ POSTS : categorizes
     GROUPS {
         int id PK
-        varchar_100 name
+        varchar name
         text description
         longtext image_url
         enum status
@@ -269,13 +327,35 @@ erDiagram
         datetime joined_at
     }
 
-    POSTS ||--o{ POST_IMAGES : attaches
-    POSTS ||--o{ REPLIES : receives
+    GROUP_REQUESTS {
+        int id PK
+        int group_id FK
+        int user_id FK
+        datetime created_at
+    }
+
+    GROUP_BANS {
+        int id PK
+        int group_id FK
+        int user_id FK
+        int banned_by FK
+        datetime created_at
+    }
+
+    GROUP_NOTICES {
+        int id PK
+        int group_id FK
+        int user_id FK
+        varchar headline
+        longtext message
+        datetime created_at
+    }
+
     POSTS {
         int id PK
         int user_id FK
         int group_id FK
-        varchar_255 title
+        varchar title
         text content
         int views
         tinyint is_pinned
@@ -290,7 +370,6 @@ erDiagram
         datetime created_at
     }
 
-    REPLIES ||--o{ REPLIES : nests
     REPLIES {
         int id PK
         int post_id FK
@@ -301,167 +380,156 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
-```
 
-### Table Dictionary
-
-| Table Name          | Primary Key           | Foreign Keys                      | Role & Description                                                                                              |
-| :------------------ | :-------------------- | :-------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
-| **`users`**         | `id` (AUTO_INCREMENT) | —                                 | Unified relational bridge maintaining clean foreign keys across all entities without complex polymorphic joins. |
-| **`students`**      | `id` (VARCHAR 10)     | —                                 | Dedicated storage for member accounts with unique 10-digit account identifiers.                                 |
-| **`admins`**        | `id` (VARCHAR 10)     | —                                 | Dedicated storage for system administrator accounts.                                                            |
-| **`groups`**        | `id` (AUTO_INCREMENT) | `created_by` → `users(id)`        | Discussion categories; supports `active` and `restricted` states.                                               |
-| **`group_members`** | `id` (AUTO_INCREMENT) | `group_id`, `user_id`             | Unique composite relationship (`group_id`, `user_id`) gating post creation.                                     |
-| **`posts`**         | `id` (AUTO_INCREMENT) | `user_id`, `group_id`             | Discussion threads with title, content, view counter, and pinned flag.                                          |
-| **`post_images`**   | `id` (AUTO_INCREMENT) | `post_id` → `posts(id)`           | Multi-image attachments linked to posts with cascading deletion.                                                |
-| **`replies`**       | `id` (AUTO_INCREMENT) | `post_id`, `user_id`, `parent_id` | Threaded comments supporting recursive nested replies (`parent_id` self-reference).                             |
-
----
-
-## 🔒 Security & Validation
-
-The application incorporates multi-layered defensive engineering to protect user data and platform integrity:
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        SECURITY IMPLEMENTATION                         │
-├──────────────────────┬─────────────────────────────────────────────────┤
-│ SQL Injection        │ Parameterized Prepared Statements across 100%   │
-│ Defense              │ of dynamic queries ($stmt->prepare / bind_param)│
-├──────────────────────┼─────────────────────────────────────────────────┤
-│ Password Cryptography│ Bcrypt hashing with random salt via PHP's native│
-│                      │ password_hash($pwd, PASSWORD_BCRYPT)            │
-├──────────────────────┼─────────────────────────────────────────────────┤
-│ Cross-Site Scripting │ Context-aware escaping via htmlspecialchars()   │
-│ (XSS) Prevention     │ and regex attribute stripping on rich content   │
-├──────────────────────┼─────────────────────────────────────────────────┤
-│ Access Control (RBAC)│ Strict session verification on administrative   │
-│                      │ endpoints and author ownership checks on writes │
-├──────────────────────┼─────────────────────────────────────────────────┤
-│ File Upload Security │ Extension, MIME-type, and payload size bounds   │
-│                      │ validation prior to image processing            │
-├──────────────────────┼─────────────────────────────────────────────────┤
-│ Database Cascades    │ Referential integrity enforced at the engine    │
-│                      │ level using ON DELETE CASCADE                   │
-└──────────────────────┴─────────────────────────────────────────────────┘
+    STUDENTS ||--o| USERS : "syncs uid"
+    ADMINS ||--o| USERS : "syncs uid"
+    USERS ||--o{ GROUPS : "creates"
+    USERS ||--o{ GROUP_MEMBERS : "joins"
+    GROUPS ||--o{ GROUP_MEMBERS : "has members"
+    USERS ||--o{ GROUP_REQUESTS : "requests"
+    GROUPS ||--o{ GROUP_REQUESTS : "receives"
+    USERS ||--o{ GROUP_BANS : "banned in"
+    GROUPS ||--o{ GROUP_BANS : "enforces"
+    USERS ||--o{ GROUP_NOTICES : "publishes"
+    GROUPS ||--o{ GROUP_NOTICES : "contains"
+    USERS ||--o{ POSTS : "authors"
+    GROUPS ||--o{ POSTS : "categorizes"
+    POSTS ||--o{ POST_IMAGES : "attaches"
+    POSTS ||--o{ REPLIES : "receives"
+    USERS ||--o{ REPLIES : "writes"
+    REPLIES ||--o{ REPLIES : "nests (parent_id)"
 ```
 
 ---
 
-## 📁 Repository Directory Structure
+## Database Keys and Relationships
 
-```
+- **Primary Keys (`PK`)**:
+  - `students.id` and `admins.id` use 10-digit `VARCHAR(10)` identifiers.
+  - All relational forum tables (`users`, `groups`, `group_members`, `group_requests`, `group_bans`, `group_notices`, `posts`, `post_images`, `replies`) use `INT AUTO_INCREMENT` surrogate primary keys for fast integer joins.
+- **Foreign Keys (`FK`) & Cascading Integrity**:
+  - Deleting a `group` cascades (`ON DELETE CASCADE`) to `group_members`, `group_requests`, `posts` (and through `posts` to `post_images` and `replies`), and `group_notices`.
+  - Deleting a `user` cascades (`ON DELETE CASCADE`) to their memberships, requests, posts, and replies, while `groups.created_by` uses `ON DELETE SET NULL` so groups survive creator removal.
+  - Deleting a parent reply cascades down child replies via `replies.parent_id -> replies.id`.
+- **Unique Keys (`UK`) & Composite Constraints**:
+  - `students(email)`, `admins(email)`, `users(email)`, and `users(uid)` prevent duplicate account registrations and link role tables to `users`.
+  - Composite unique indexes on `group_members(group_id, user_id)`, `group_requests(group_id, user_id)`, and `group_bans(group_id, user_id)` guarantee a user cannot hold duplicate memberships, join requests, or ban records in the same group.
+- **Performance Indexes**:
+  - Single-column indexes on `users(role)`, `groups(status)`, `posts(user_id, group_id, created_at)`, `post_images(post_id)`, `replies(post_id, user_id, parent_id)`, and `group_notices(group_id)` speed up feed filtering, sorting, and thread loading.
+
+---
+
+## Project Folder Structure
+
+```text
 FORUM-OR-DISCUSSION-BOARD/
-│
-├── assets/                          # Static Frontend Resources
+├── assets/
 │   ├── css/
-│   │   ├── auth.css                 # Dedicated portal styling (forms, input groups, badges)
-│   │   └── style.css                # Master application stylesheet (themes, cards, layout)
+│   │   ├── auth.css                 # Login & registration UI styles
+│   │   └── style.css                # Main dark/light themes, layout, cards & modals
+│   ├── images/                      # Brand logos, favicon, and default avatar SVG
 │   ├── js/
-│       └── main.js                  # Client logic, WYSIWYG engine, dynamic modals & previews
-│
-├── includes/                        # Reusable Component Partials
-│   └── mobile-nav.php               # Bottom navigation bar for mobile viewports
-│
-├── admin_register.php               # Admin onboarding router with authorization verification
-├── db.php                           # Database connection gateway, session init & sanitize helpers
-├── index.php                        # Master controller: Home feed, composer, group views & search
-├── login.php                        # Multi-role authentication portal
-├── logout.php                       # Secure session termination and redirect handler
-├── profile.php                      # User profile controller, banner/avatar upload & activity
-├── register.php                     # Member registration handler
-├── reply.php                        # Discussion reply router and deep-link handler
-├── schema.sql                       # Production DDL database schema with table definitions
-├── test_auth_visibility.php         # Diagnostic utility verifying session state isolation
-├── thread.php                       # Single thread permalink router
+│   │   └── main.js                  # WYSIWYG toolbar, modals, previews, filters & pagination
+│   └── screenshots/                 # Captured UI screenshots used in documentation
+├── includes/
+│   └── mobile-nav.php               # Mobile header bar, bottom nav tabs, and slide-out drawer
+├── admin_register.php               # Direct entry point to admin registration
+├── db.php                           # MySQLi connection, session init, XSS escaping & helpers
+├── index.php                        # Main router/controller (feed, groups, notices, admin console)
+├── login.php                        # Multi-role sign-in controller & view
+├── logout.php                       # Session & remember-cookie cleanup
+├── profile.php                      # Profile viewer, avatar/banner uploader & activity tabs
+├── register.php                     # Student, faculty & admin registration handler
+├── reply.php                        # Reply permalink redirector
+├── schema.sql                       # Base MySQL database DDL schema
+├── test_auth_visibility.php         # Session visibility diagnostic script
+├── thread.php                       # Discussion thread permalink redirector
 └── README.md                        # Project documentation
 ```
 
 ---
 
-## 🚀 Installation & Getting Started
+## Installation and Setup
 
 ### Prerequisites
 
-- [XAMPP](https://www.apachefriends.org/) (recommended) or any standalone **Apache 2.4+**, **PHP 8.2+**, and **MySQL 8.0+** environment.
-- Web Browser (Chrome, Firefox, Safari, Edge).
-- Git installed on your system.
+- [XAMPP](https://www.apachefriends.org/) (or standalone **Apache 2.4+**, **PHP 8.2+**, and **MySQL 8.0+ / MariaDB**).
 
-### Step-by-Step Setup
+### Steps
 
-#### 1. Clone the Repository
-
-Clone this repository directly into your local web root directory (for XAMPP on Windows, use `htdocs`):
-
-```bash
-cd C:\xampp\htdocs
-git clone https://github.com/your-username/FORUM-OR-DISCUSSION-BOARD.git
-```
-
-#### 2. Start Web & Database Services
-
-Launch the **XAMPP Control Panel** and start:
-
-- **Apache** (Default ports: `80`, `443`)
-- **MySQL** (Default port: `3306`)
-
-#### 3. Import the Database Schema
-
-1. Open your browser and navigate to phpMyAdmin:
+1. Clone or place the repository into your web server root (e.g., `C:\xampp\htdocs\FORUM-OR-DISCUSSION-BOARD`).
+2. Start **Apache** and **MySQL** from the XAMPP Control Panel.
+3. Open **phpMyAdmin** (`http://localhost/phpmyadmin/`), go to **Import**, and import [`schema.sql`](./schema.sql).
+4. If migrating or setting up group bans manually, ensure the `group_bans` table exists:
+   ```sql
+   CREATE TABLE IF NOT EXISTS `group_bans` (
+     `id` INT AUTO_INCREMENT PRIMARY KEY,
+     `group_id` INT NOT NULL,
+     `user_id` INT NOT NULL,
+     `banned_by` INT NOT NULL,
+     `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+     UNIQUE KEY `uq_group_user` (`group_id`, `user_id`)
+   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
    ```
-   http://localhost/phpmyadmin/
-   ```
-2. Click on the **Import** tab in the top navigation bar.
-3. Click **Choose File** and select the [`schema.sql`](./schema.sql) file located in the project root directory.
-4. Click **Import** (or **Go**).
-5. The database `quaddit` and all required tables (`users`, `admins`, `students`, `groups`, `group_members`, `posts`, `post_images`, `replies`) will be created automatically.
 
-#### 4. Configure Database Connection (Optional)
+---
 
-If your local MySQL uses a custom port, password, or host, adjust settings in [`db.php`](./db.php):
+## Database Configuration
+
+Database settings are defined in [`db.php`](./db.php):
 
 ```php
-$conn = new mysqli('127.0.0.1', 'root', 'your_password', 'quaddit', 3306);
+$conn = new mysqli('127.0.0.1', 'root', '', 'Quaddit');
+$conn->set_charset("utf8mb4");
+$conn->query("SET time_zone = '+05:30'");
 ```
 
-#### 5. Launch the Application
+- Update the host, username, password, or database name in `db.php` to match your environment.
+- Note that `schema.sql` creates `quaddit` (lowercase) while `db.php` connects to `'Quaddit'`. On Windows this is case-insensitive, while on Linux you should match the exact database casing.
 
-Open your browser and navigate to:
+---
 
-```
-http://localhost/FORUM-OR-DISCUSSION-BOARD/
-```
+## How to Run the Project
 
-#### 6. Admin Account Setup
-
-To create your first system administrator account:
-
-1. Navigate to: `http://localhost/FORUM-OR-DISCUSSION-BOARD/admin_register.php`
-2. Enter your details and provide the administrative authorization key:
+1. Ensure Apache and MySQL are running.
+2. Visit the forum in your browser:
+   ```text
+   http://localhost/FORUM-OR-DISCUSSION-BOARD/
    ```
-   QUAD-ADMIN-2026
-   ```
-3. Complete registration and access the administrative dashboard.
+3. Register a standard member account via `register.php`, or register an administrator account via `admin_register.php` using the configured authorization key (`QUAD-ADMIN-2026` in `register.php`) or an authorized roster entry.
 
 ---
 
-## 🗺️ Roadmap & Future Enhancements
+## Security Considerations
 
-- [ ] **Real-Time WebSockets**: Instant message and comment streaming using Ratchet PHP / Socket.io without page reload.
-- [ ] **Full-Text Search Engine**: Replace standard SQL `LIKE` queries with indexed full-text search (MeiliSearch or Elasticsearch).
-- [ ] **OAuth2 & Social Logins**: One-click authentication with Google and GitHub.
-- [ ] **Direct Private Messaging**: End-to-end encrypted 1-on-1 conversations between community members.
-- [ ] **Markdown Code Syntax Highlighting**: Integrated Prism.js / Highlight.js for code snippets in technical discussions.
-- [ ] **RESTful API & Mobile Client**: Decoupled JSON REST API powering native iOS and Android mobile apps.
+### Implemented Protections
+
+- **Parameterized SQL Queries**: Queries across `index.php`, `profile.php`, `login.php`, `register.php`, and `db.php` use `execute_query()` / prepared statements to defend against SQL injection.
+- **Output Escaping & Sanitization**: Plain text output is escaped with `e()` (`htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`), while rich-text HTML is filtered in `render_rich_formatted_text()` to allow only safe formatting tags (`<b>`, `<strong>`, `<i>`, `<em>`, `<u>`, `<s>`, `<h3>`, `<ul>`, `<ol>`, `<li>`, `<code>`, `<a>`, etc.) and safe link protocols (`https://`, `http://`, `/`).
+- **Password Hashing**: Account registration hashes passwords with `password_hash($password, PASSWORD_BCRYPT)` and verifies them via `password_verify()`.
+- **Role & Ownership Enforcement**: Admin endpoints verify `is_admin()`, posting/replying verifies group membership and absence of bans in `group_bans`, and post/reply edits or deletions check author ownership or admin status.
+- **Upload Validation**: Uploaded images are inspected via `finfo`/`mime_content_type()` before Base64 encoding.
+
+### Notes for Production Hardening
+
+- **Move secrets & DB credentials out of tracked source**: Database credentials in `db.php` and the hardcoded admin registration key (`QUAD-ADMIN-2026`) in `register.php` should be moved into environment variables before deploying publicly.
+- **Remove development/diagnostic conveniences**: `login.php` includes a development `"Instant Sign In"` (`bypass`) flow and a legacy plaintext password fallback on student login; `test_auth_visibility.php` is a diagnostic script. Both should be disabled or removed in production.
+- **CSRF Protection**: State-changing GET/POST links (such as delete/ban/approve actions) currently rely on session authentication; adding CSRF tokens would further harden state-changing actions.
 
 ---
 
-## 📄 License
+## Future Improvements
 
-This project is open-source and available under the **[MIT License](https://opensource.org/licenses/MIT)**.
+- Replace GET-based moderation/membership action links with POST requests protected by CSRF tokens.
+- Add an external environment configuration file (`.env` / `config.local.php`) for database credentials and admin keys.
+- Store uploaded images on disk or object storage rather than `LONGTEXT` Base64 columns as media volume grows.
+- Include `group_bans` directly inside `schema.sql` and add a `LICENSE` file if open-sourcing the project.
 
 ---
 
-<div align="center">
-  <sub>Built with ❤️ using pure PHP, MySQL, and modern Vanilla Web Standards.</sub>
-</div>
+## Contributors
+
+| Contributor | Contribution |
+| --- | --- |
+| **Aditya Biswas** (`AdityaBiswas-in`) | Core backend logic, database features, UI/UX design, mobile responsiveness, rich-text editor, moderation, and announcements |
+| **Prithviraj Pati** (`EMON56GIF`) | Frontend styling, feed updates, repository coordination, and initial documentation |
